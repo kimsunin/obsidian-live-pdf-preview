@@ -45,7 +45,7 @@ Click the gear icon (⚙️) on the top right of the preview header to open page
 * **Landscape:** Toggle between Portrait and Landscape layouts.
 * **Show file name as title:** Automatically render the filename as the main document header.
 
-![Page Layout Settings Modal](2026-06-29_setting.png)
+![Page Layout Settings Modal](./assets/2026-06-29_setting.png)
 
 ## 🌐 Multilingual Readme
 * [한국어 버전 (Korean Version)](./README.ko.md)

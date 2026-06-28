@@ -45,4 +45,4 @@ Obsidian에서 문서를 편집하면서 **실제 인쇄물(A4) 형식의 레이
 * **Landscape (가로 출력):** 용지를 가로 방향으로 눕히고 싶을 때 설정
 * **Show file name as title:** 파일 이름을 문서 맨 위에 대제목으로 자동 포함할지 여부 설정
 
-![Page Layout Settings Modal](2026-06-29_setting.png)
+![Page Layout Settings Modal](./assets/2026-06-29_setting.png)
