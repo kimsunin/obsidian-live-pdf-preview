@@ -25,6 +25,8 @@ It streamlines your writing workflow by combining document editing and publicati
 ### 3. Custom Page Breaks (`//page`)
 * Want to start a new page? Simply type **`//page`** on its own line in the editor, and the following content will begin on a fresh page.
 
+![Paging Screenshot](./assets/2026-06-29_paging.png)
+
 ### 4. One-Click PDF Export with Bookmarks
 * Click the 🖨️ (printer icon) on the top right of the preview header to save your document as a PDF.
 * Document headings (`# H1` to `###### H6`) are automatically converted into **interactive PDF outlines (bookmarks)**, allowing readers to jump between sections in any PDF viewer.
