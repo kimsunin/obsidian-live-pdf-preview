@@ -4,7 +4,7 @@ An Obsidian plugin that lets you edit Markdown documents while **viewing a real-
 
 It streamlines your writing workflow by combining document editing and publication layout design into one seamless process.
 
-![[스크린샷 2026-06-29 오전 12.49.01.png]]
+![[./assets/스크린샷 2026-06-29 오전 12.49.01.png]]
 
 ---
 
@@ -51,7 +51,7 @@ Click the gear icon (⚙️) on the top right of the preview header to open page
 * **Landscape:** Toggle between Portrait and Landscape layouts.
 * **Show file name as title:** Automatically render the filename as the main document header.
 
-![[스크린샷 2026-06-29 오전 12.50.40.png]]
+![[./assets/스크린샷 2026-06-29 오전 12.50.40.png]]
 
 ---
 
