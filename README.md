@@ -6,14 +6,10 @@ It streamlines your writing workflow by combining document editing and publicati
 
 ![Obsidian Live PDF Preview Main Screenshot](./assets/2026-06-29_layout.png)
 
----
-
 ## 🌟 Who is this for?
 * Writers who compose **print-ready documents** like reports, resumes, proposals, and essays in Obsidian.
 * Users who want to **verify line wraps, margins, and page breaks in real-time** before exporting.
 * Anyone who wants their exported PDFs to automatically feature **click-navigable outlines/bookmarks** for easy reading.
-
----
 
 ## ✨ Key Features
 
@@ -34,8 +30,6 @@ It streamlines your writing workflow by combining document editing and publicati
 * Document headings (`# H1` to `###### H6`) are automatically converted into **interactive PDF outlines (bookmarks)**, allowing readers to jump between sections in any PDF viewer.
 * The export process runs cleanly in the background without causing screen flashes or white-outs.
 
----
-
 ## 🛠️ How to Use
 
 ### 1. Launching the Preview
@@ -52,18 +46,6 @@ Click the gear icon (⚙️) on the top right of the preview header to open page
 * **Show file name as title:** Automatically render the filename as the main document header.
 
 ![Page Layout Settings Modal](2026-06-29_setting.png)
-
----
-
-## 💻 For Developers
-
-If you want to build or customize this plugin locally:
-
-* **Install dependencies:** `npm install`
-* **Build (production files):** `npm run build` (outputs are created inside the `./build` directory)
-* **Watch Mode (dev server):** `npm run dev`
-
----
 
 ## 🌐 Multilingual Readme
 * [한국어 버전 (Korean Version)](./README.ko.md)
