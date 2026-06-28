@@ -1,0 +1,370 @@
+import { Component, ItemView, MarkdownRenderer, WorkspaceLeaf, TFile, setIcon } from 'obsidian';
+import { debounce } from 'lodash-es';
+import { restoreFromPages, applyPageBreaks, applyVirtualPagination } from './pagination';
+import { ExportPdfModal, exportToPdf } from './export';
+
+export const VIEW_TYPE_PDF_PREVIEW = 'live-pdf-preview-view';
+
+export class PdfPreviewView extends ItemView {
+	private previewContainer!: HTMLDivElement;
+	private masterContainer!: HTMLDivElement;
+	private upperEl!: HTMLDivElement;
+	private lowerEl!: HTMLDivElement;
+
+	private upperComponent = new Component();
+	private lowerComponent = new Component();
+
+	public cachedUpperText = '';
+	private currentFile: TFile | null = null;
+
+	public pageSize = 'A4';
+	public landscape = false;
+	public margin = '20mm';
+	public scale = 100;
+	public showTitle = true;
+	private showPageNumbers = false;
+	private resizeObserver: ResizeObserver | null = null;
+
+	private debouncedRender = debounce(() => {
+		this.renderPartial();
+	}, 150);
+
+	constructor(leaf: WorkspaceLeaf) {
+		super(leaf);
+	}
+
+	getViewType(): string {
+		return VIEW_TYPE_PDF_PREVIEW;
+	}
+
+	getDisplayText(): string {
+		return 'Live PDF Preview';
+	}
+
+	getIcon(): string {
+		return 'document';
+	}
+
+	async onOpen() {
+		const container = this.contentEl;
+		container.empty();
+
+		// Create header (Obsidian native style)
+		const headerEl = container.createEl('div', {
+			cls: 'pdf-preview-header',
+		});
+
+		const actionsEl = headerEl.createEl('div', {
+			cls: 'pdf-preview-header-actions',
+		});
+
+		// Settings button
+		const settingsBtn = actionsEl.createEl('button', {
+			cls: 'clickable-icon pdf-action-btn',
+			attr: { 'aria-label': 'Page settings' }
+		});
+		setIcon(settingsBtn, 'settings');
+
+		// Export PDF button
+		const exportBtn = actionsEl.createEl('button', {
+			cls: 'clickable-icon pdf-action-btn',
+			attr: { 'aria-label': 'Export to PDF' }
+		});
+		setIcon(exportBtn, 'printer');
+
+		// Settings button opens the native settings modal
+		settingsBtn.addEventListener('click', () => {
+			new ExportPdfModal(this.app, this).open();
+		});
+
+		// Export PDF button (printer icon) immediately exports!
+		exportBtn.addEventListener('click', () => {
+			this.exportToPdf();
+		});
+
+		// Create root container for A4 canvas (no theme-light here, so the panel and controls follow the active theme)
+		this.previewContainer = container.createEl('div', {
+			cls: 'pdf-preview-container',
+		});
+
+		// Create the master render container (hidden offscreen)
+		this.masterContainer = container.createEl('div', {
+			cls: 'pdf-preview-master',
+		});
+
+		// Upper and lower sections for partial rendering (Phase 3)
+		this.upperEl = this.masterContainer.createEl('div');
+		this.lowerEl = this.masterContainer.createEl('div');
+
+		// Apply initial values
+		this.updateLayoutSettings();
+
+		this.upperComponent.load();
+		this.lowerComponent.load();
+
+		// Subscribe to editor-change events for real-time rendering
+		this.registerEvent(
+			this.app.workspace.on('editor-change', (editor, info) => {
+				// Only re-render if the change belongs to the active file being previewed
+				if (info.file === this.currentFile) {
+					this.debouncedRender();
+				}
+			})
+		);
+
+		// Subscribe to file-open events to update the preview when switching files
+		this.registerEvent(
+			this.app.workspace.on('file-open', (file) => {
+				this.onFileOpen(file);
+			})
+		);
+
+		// Add a ResizeObserver to trigger postProcess when the view is attached and sized
+		this.resizeObserver = new ResizeObserver(
+			debounce(() => {
+				if (this.previewContainer && this.previewContainer.offsetHeight > 0) {
+					this.postProcess();
+				}
+			}, 100)
+		);
+		this.resizeObserver.observe(this.previewContainer);
+
+		// Initial render of current active file
+		const activeFile = this.app.workspace.getActiveFile();
+		this.onFileOpen(activeFile);
+	}
+
+	async onClose() {
+		this.debouncedRender.cancel();
+		this.upperComponent.unload();
+		this.lowerComponent.unload();
+		if (this.resizeObserver) {
+			this.resizeObserver.disconnect();
+			this.resizeObserver = null;
+		}
+	}
+
+	onResize() {
+		super.onResize();
+		if (!this.previewContainer) return;
+		
+		// If pages have not been built yet (e.g. background tab reveal), run pagination
+		const wrappers = this.previewContainer.querySelectorAll('.pdf-page-wrapper');
+		if (wrappers.length === 0) {
+			this.postProcess();
+		}
+	}
+
+	// --- File change detection ---
+ 
+	private onFileOpen(file: TFile | null) {
+		if (!file || file.extension !== 'md') return;
+
+		if (file === this.currentFile) return;
+		this.currentFile = file;
+		this.cachedUpperText = '';
+		this.renderFull();
+	}
+
+	// --- Rendering ---
+
+	/**
+	 * Helper to restore DOM elements from pages back to upper/lower master elements.
+	 */
+	private restoreFromPages() {
+		restoreFromPages(this.previewContainer, this.upperEl, this.lowerEl);
+	}
+
+	public async renderFull() {
+		if (!this.currentFile) {
+			this.restoreFromPages();
+			this.upperEl.empty();
+			this.lowerEl.empty();
+			return;
+		}
+
+		this.restoreFromPages();
+		
+		// Read the file directly from the Vault (always correct, no race conditions with editor loading)
+		let text = await this.app.vault.read(this.currentFile);
+		const sourcePath = this.currentFile.path;
+
+		if (this.showTitle) {
+			text = `# ${this.currentFile.basename}\n\n` + text;
+		}
+
+		this.upperEl.empty();
+		this.lowerEl.empty();
+		this.cachedUpperText = '';
+
+		this.lowerComponent.unload();
+		this.lowerComponent = new Component();
+		this.lowerComponent.load();
+
+		await MarkdownRenderer.render(this.app, text, this.lowerEl, sourcePath, this.lowerComponent);
+
+		this.postProcess();
+	}
+
+	/**
+	 * Partial render (Phase 3): finds the block boundary near the cursor,
+	 * keeps the upper DOM cached, and only re-renders the lower portion.
+	 */
+	private async renderPartial() {
+		if (!this.currentFile) return;
+
+		// Find the workspace leaf displaying the current file to read its contents
+		let targetView: any = null;
+		this.app.workspace.iterateAllLeaves((leaf) => {
+			if (leaf.view.getViewType() === 'markdown' && (leaf.view as any).file === this.currentFile) {
+				targetView = leaf.view;
+			}
+		});
+
+		if (!targetView) return;
+
+		this.restoreFromPages();
+		const editor = targetView.editor;
+		let text = editor.getValue();
+		const sourcePath = this.currentFile.path;
+		let cursorLine = editor.getCursor().line;
+
+		if (this.showTitle) {
+			text = `# ${this.currentFile.basename}\n\n` + text;
+			cursorLine = cursorLine + 2;
+		}
+
+		// Find safe block boundary above cursor
+		const cutLine = this.findCutLine(text, cursorLine);
+		const lines = text.split('\n');
+		const upperText = lines.slice(0, cutLine).join('\n');
+		const lowerText = lines.slice(cutLine).join('\n');
+
+		if (upperText === this.cachedUpperText) {
+			// Upper unchanged → only re-render the lower section
+			this.lowerEl.empty();
+			this.lowerComponent.unload();
+			this.lowerComponent = new Component();
+			this.lowerComponent.load();
+
+			if (lowerText) {
+				await MarkdownRenderer.render(this.app, lowerText, this.lowerEl, sourcePath, this.lowerComponent);
+			}
+		} else {
+			// Upper changed → full re-render with new split
+			this.upperEl.empty();
+			this.lowerEl.empty();
+
+			this.upperComponent.unload();
+			this.upperComponent = new Component();
+			this.upperComponent.load();
+			this.lowerComponent.unload();
+			this.lowerComponent = new Component();
+			this.lowerComponent.load();
+
+			if (upperText) {
+				await MarkdownRenderer.render(this.app, upperText, this.upperEl, sourcePath, this.upperComponent);
+			}
+			if (lowerText) {
+				await MarkdownRenderer.render(this.app, lowerText, this.lowerEl, sourcePath, this.lowerComponent);
+			}
+
+			this.cachedUpperText = upperText;
+		}
+
+		this.postProcess();
+	}
+
+	/**
+	 * Searches upward from the cursor line to find the nearest blank line,
+	 * which marks a safe markdown block boundary for splitting.
+	 * Returns the line index where the lower section starts.
+	 */
+	private findCutLine(text: string, cursorLine: number): number {
+		const lines = text.split('\n');
+		const start = Math.min(cursorLine - 1, lines.length - 1);
+		for (let i = start; i >= 0; i--) {
+			const line = lines[i];
+			if (line !== undefined && line.trim() === '') {
+				return i + 1;
+			}
+		}
+		return 0;
+	}
+
+	// --- Post-processing (Phase 4) ---
+
+	private postProcess() {
+		if (!this.upperEl || !this.lowerEl) return;
+		applyPageBreaks(this.upperEl, this.lowerEl);
+		applyVirtualPagination({
+			previewContainer: this.previewContainer,
+			upperEl: this.upperEl,
+			lowerEl: this.lowerEl,
+			showPageNumbers: this.showPageNumbers,
+			getPageDimensionsMm: () => this.getPageDimensionsMm(),
+		});
+	}
+
+	private getPageDimensionsMm(): { width: number; height: number } {
+		let width = 210;
+		let height = 297;
+
+		switch (this.pageSize) {
+			case 'Letter':
+				width = 215.9;
+				height = 279.4;
+				break;
+			case 'A3':
+				width = 297;
+				height = 420;
+				break;
+			case 'A5':
+				width = 148;
+				height = 210;
+				break;
+			case 'Legal':
+				width = 215.9;
+				height = 355.6;
+				break;
+			case 'A4':
+			default:
+				width = 210;
+				height = 297;
+				break;
+		}
+
+		if (this.landscape) {
+			return { width: height, height: width };
+		}
+		return { width, height };
+	}
+
+	public updateLayoutSettings() {
+		// Update CSS variables on the previewContainer
+		if (this.previewContainer) {
+			const dims = this.getPageDimensionsMm();
+			this.previewContainer.style.setProperty('--pdf-page-width', `${dims.width}mm`);
+			this.previewContainer.style.setProperty('--pdf-page-height', `${dims.height}mm`);
+			
+			// Map scale to font size: 100% scale corresponds to base 16px font size
+			const calculatedFontSize = 16 * (this.scale / 100);
+			this.previewContainer.style.setProperty('--pdf-base-font-size', `${calculatedFontSize}px`);
+			this.previewContainer.style.setProperty('--pdf-page-margin', this.margin);
+		}
+		
+		// Re-trigger pagination to adapt immediately
+		this.postProcess();
+	}
+
+	public async exportToPdf() {
+		if (!this.currentFile) return;
+		await exportToPdf({
+			previewContainer: this.previewContainer,
+			pageSize: this.pageSize,
+			landscape: this.landscape,
+			scale: this.scale,
+			currentFile: this.currentFile,
+		});
+	}
+}

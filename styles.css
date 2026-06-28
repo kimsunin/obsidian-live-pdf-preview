@@ -1,0 +1,372 @@
+/*
+  Obsidian Live PDF Preview Styling
+*/
+
+/* View Content layout to split header and scrollable canvas */
+.workspace-leaf-content[data-type="live-pdf-preview-view"] .view-content {
+	display: flex;
+	flex-direction: column;
+	padding: 0 !important;
+	overflow: hidden;
+}
+
+/* Obsidian-style header base */
+.pdf-preview-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	height: 40px; /* Adjusted to match Obsidian's default 40px view header height */
+	padding: 0 16px;
+	flex-shrink: 0;
+	box-sizing: border-box;
+	/* Removed background-color to let it transparently inherit native view background */
+	/* Only keep the bottom border to separate the header from the content canvas below */
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.pdf-preview-header-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	justify-content: flex-end; /* Align actions to the right */
+	width: 100%;
+}
+
+/* Outer container of the canvas */
+.pdf-preview-container {
+	flex-grow: 1; /* occupy remaining height */
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	padding: 20px;
+	overflow-y: auto;
+	box-sizing: border-box;
+	container-type: inline-size; /* Enable container query width (cqw) to query this container's width */
+}
+
+/* Master/render container (hidden from view but layouted offscreen for height measurement) */
+.pdf-preview-master {
+	position: absolute;
+	left: -9999px;
+	top: -9999px;
+	width: 100%;
+	max-width: 210mm;
+	padding: 20mm;
+	box-sizing: border-box;
+	visibility: hidden;
+}
+
+.pdf-preview-page {
+	/* Explicitly white background to simulate A4 paper */
+	background-color: #ffffff !important;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+	width: var(--pdf-page-width, 210mm) !important;
+	height: var(--pdf-page-height, 297mm) !important;
+	padding: var(--pdf-page-margin, 20mm) !important; /* Dynamic A4 padding margins */
+	box-sizing: border-box;
+	position: relative;
+	border: 1px solid rgba(0, 0, 0, 0.15);
+	flex-shrink: 0;
+	transition: none !important; /* Disable any transition stuttering during resize */
+	/* Pure CSS scale factor: available width (100cqw - 40px) divided by current page width */
+	transform: scale(calc((100cqw - 40px) / var(--pdf-page-width, 210mm)));
+	transform-origin: top center;
+	overflow: hidden !important; /* Prevent scrollbars inside individual page elements */
+
+	/* Apply dynamic font size */
+	font-size: var(--pdf-base-font-size, 16px) !important;
+	--font-text-size: var(--pdf-base-font-size, 16px) !important;
+
+	/* Emulate print media colors to override active dark theme settings and match native light PDF export */
+	--text-normal: #111111 !important;
+	--text-muted: #555555 !important;
+	--text-faint: #888888 !important;
+
+	/* Force light backgrounds for code blocks, tables, and callouts to match native light PDF export */
+	--code-background: #f5f6f8 !important;
+	--background-secondary: #f5f6f8 !important;
+	--background-secondary-alt: #ebeef2 !important;
+	--background-primary-alt: #fafafa !important;
+	--background-modifier-border: #e0e0e0 !important;
+	--hr-color: #e0e0e0 !important;
+}
+
+/* Force light-theme high-contrast syntax highlighting for code blocks inside the preview page */
+.pdf-preview-page pre,
+.pdf-preview-page code {
+	color: #111111 !important;
+}
+.pdf-preview-page .token.keyword,
+.pdf-preview-page .cm-keyword { color: #0000ff !important; font-weight: bold; }
+.pdf-preview-page .token.string,
+.pdf-preview-page .cm-string { color: #a31515 !important; }
+.pdf-preview-page .token.comment,
+.pdf-preview-page .cm-comment { color: #008000 !important; font-style: italic; }
+.pdf-preview-page .token.number,
+.pdf-preview-page .cm-number { color: #098658 !important; }
+.pdf-preview-page .token.boolean,
+.pdf-preview-page .cm-boolean { color: #0000ff !important; }
+.pdf-preview-page .token.operator,
+.pdf-preview-page .cm-operator { color: #000000 !important; }
+.pdf-preview-page .token.function,
+.pdf-preview-page .cm-function { color: #795e26 !important; }
+.pdf-preview-page .token.class-name,
+.pdf-preview-page .cm-variable-2 { color: #267f99 !important; }
+.pdf-preview-page .token.property,
+.pdf-preview-page .cm-property { color: #0451a5 !important; }
+.pdf-preview-page .token.regex,
+.pdf-preview-page .cm-string-2 { color: #811f3f !important; }
+.pdf-preview-page .token.variable,
+.pdf-preview-page .cm-variable { color: #001080 !important; }
+
+/* General print layout polish (matching Obsidian's native print styles) */
+.pdf-preview-page h1,
+.pdf-preview-page h2,
+.pdf-preview-page h3,
+.pdf-preview-page h4,
+.pdf-preview-page h5,
+.pdf-preview-page h6 {
+	border-bottom: none !important;
+}
+
+.pdf-preview-page h1 {
+	margin-top: 0.5em;
+	margin-bottom: 0.5em;
+	padding-bottom: 0.3em;
+}
+.pdf-preview-page h2 {
+	margin-top: 0.8em;
+	margin-bottom: 0.4em;
+}
+.pdf-preview-page h3 {
+	margin-top: 0.8em;
+	margin-bottom: 0.4em;
+}
+.pdf-preview-page p {
+	margin-top: 0;
+	margin-bottom: 0.8em;
+	line-height: 1.6;
+}
+.pdf-preview-page ul,
+.pdf-preview-page ol {
+	margin-top: 0;
+	margin-bottom: 0.8em;
+	padding-left: 1.5em;
+}
+.pdf-preview-page li {
+	margin-bottom: 0.2em;
+}
+.pdf-preview-page hr {
+	border: none !important;
+	border-top: 1px solid var(--hr-color, #e0e0e0) !important;
+	margin: 1.5em 0 !important;
+	height: 0 !important;
+}
+.pdf-preview-page blockquote {
+	border-left: 4px solid var(--background-modifier-border) !important;
+	margin: 1em 0;
+	padding: 0.5em 1em;
+	color: var(--text-muted) !important;
+	background-color: var(--background-secondary-alt) !important;
+}
+.pdf-preview-page table {
+	border-collapse: collapse;
+	width: 100%;
+	margin: 1em 0;
+}
+.pdf-preview-page th,
+.pdf-preview-page td {
+	border: 1px solid var(--background-modifier-border) !important;
+	padding: 6px 10px;
+}
+.pdf-preview-page th {
+	background-color: var(--background-secondary) !important;
+	font-weight: 600;
+}
+
+/* Style continuation list items to hide bullets, numbers, and padding markers */
+body .pdf-preview-page ul > li.pdf-list-split-continuation,
+body .pdf-preview-page ol > li.pdf-list-split-continuation,
+.markdown-rendered ul > li.pdf-list-split-continuation,
+.markdown-rendered ol > li.pdf-list-split-continuation,
+.markdown-preview-view ul > li.pdf-list-split-continuation,
+.markdown-preview-view ol > li.pdf-list-split-continuation,
+li.pdf-list-split-continuation {
+	list-style-type: none !important;
+	list-style: none !important;
+	background-image: none !important;
+	background: transparent !important;
+}
+
+body .pdf-preview-page ul > li.pdf-list-split-continuation::marker,
+body .pdf-preview-page ol > li.pdf-list-split-continuation::marker,
+.markdown-rendered ul > li.pdf-list-split-continuation::marker,
+.markdown-rendered ol > li.pdf-list-split-continuation::marker,
+.markdown-preview-view ul > li.pdf-list-split-continuation::marker,
+.markdown-preview-view ol > li.pdf-list-split-continuation::marker,
+li.pdf-list-split-continuation::marker {
+	content: "" !important;
+	display: none !important;
+}
+
+body.pdf-export-printing .pdf-preview-page ul > li.pdf-list-split-continuation::before,
+body.pdf-export-printing .pdf-preview-page ol > li.pdf-list-split-continuation::before,
+body .pdf-preview-page ul > li.pdf-list-split-continuation::before,
+body .pdf-preview-page ol > li.pdf-list-split-continuation::before,
+.markdown-rendered ul > li.pdf-list-split-continuation::before,
+.markdown-rendered ol > li.pdf-list-split-continuation::before,
+.markdown-preview-view ul > li.pdf-list-split-continuation::before,
+.markdown-preview-view ol > li.pdf-list-split-continuation::before,
+li.pdf-list-split-continuation::before,
+body.pdf-export-printing .pdf-preview-page ul > li.pdf-list-split-continuation::after,
+body.pdf-export-printing .pdf-preview-page ol > li.pdf-list-split-continuation::after,
+body .pdf-preview-page ul > li.pdf-list-split-continuation::after,
+body .pdf-preview-page ol > li.pdf-list-split-continuation::after,
+.markdown-rendered ul > li.pdf-list-split-continuation::after,
+.markdown-rendered ol > li.pdf-list-split-continuation::after,
+.markdown-preview-view ul > li.pdf-list-split-continuation::after,
+.markdown-preview-view ol > li.pdf-list-split-continuation::after,
+li.pdf-list-split-continuation::after {
+	content: "" !important;
+	display: none !important;
+}
+/* For task lists / checkbox markers inside continuation list items */
+.pdf-preview-page li.pdf-list-split-continuation .task-list-item-checkbox {
+	display: none !important;
+}
+
+/* Page wrapper to hold the scaled A4 page and reserve its vertical layout space */
+.pdf-page-wrapper {
+	width: 100%;
+	display: flex;
+	justify-content: center;
+	align-items: flex-start;
+	margin-bottom: 20px;
+	flex-shrink: 0;
+	box-sizing: border-box;
+	transition: none !important; /* Disable any transition stuttering during resize */
+	/* Pure CSS height scaling: page height / page width * (100cqw - 40px) */
+	height: calc((var(--pdf-page-height, 297mm) / var(--pdf-page-width, 210mm)) * (100cqw - 40px));
+}
+
+/* Manual page break helper (hidden as page split is native) */
+.pdf-page-break {
+	display: none;
+}
+
+
+/* Page number footer inside A4 preview page */
+.pdf-page-number {
+	position: absolute;
+	bottom: 8mm;
+	left: 0;
+	right: 0;
+	text-align: center;
+	font-size: 10px;
+	color: var(--text-muted) !important;
+	pointer-events: none;
+}
+
+/* Hide print clone on screen to avoid visual overlay */
+@media screen {
+	.pdf-preview-container.pdf-print-clone {
+		display: none !important;
+	}
+}
+
+/* Print Media Styles to format the output PDF layout perfectly */
+@media print {
+	/* Force light backgrounds for body to override dark themes and avoid dark margins */
+	body.pdf-export-printing {
+		background-color: #ffffff !important;
+		background: #ffffff !important;
+		color: #111111 !important;
+		--background-primary: #ffffff !important;
+		--text-normal: #111111 !important;
+	}
+
+	/* Hide the entire Obsidian application UI wrapper */
+	body.pdf-export-printing .app-container {
+		display: none !important;
+	}
+
+	/* Style our preview container which is temporarily attached to the body */
+	body.pdf-export-printing .pdf-preview-container.pdf-print-clone {
+		display: block !important;
+		position: absolute !important;
+		left: 0 !important;
+		top: 0 !important;
+		width: var(--pdf-page-width, 210mm) !important;
+		height: auto !important; /* Let it grow naturally to print all pages */
+		background: white !important;
+		padding: 0 !important;
+		margin: 0 !important;
+		overflow: visible !important;
+		z-index: 9999999 !important;
+	}
+
+	/* Each A4 page wrapper */
+	body.pdf-export-printing .pdf-page-wrapper {
+		margin: 0 !important;
+		padding: 0 !important;
+		border: none !important;
+		box-shadow: none !important;
+		background: white !important;
+		height: var(--pdf-page-height, 297mm) !important;
+		page-break-after: always !important;
+		break-after: page !important;
+		display: block !important;
+		overflow: visible !important;
+	}
+
+	/* Remove scale transformation and shadows for printing */
+	body.pdf-export-printing .pdf-preview-page {
+		transform: none !important;
+		box-shadow: none !important;
+		border: none !important;
+		margin: 0 !important;
+		width: var(--pdf-page-width, 210mm) !important;
+		height: var(--pdf-page-height, 297mm) !important;
+		background: white !important;
+		page-break-inside: avoid !important;
+		break-inside: avoid !important;
+		overflow: visible !important;
+	}
+	
+	/* Ensure page numbers are printed cleanly at the absolute bottom */
+	body.pdf-export-printing .pdf-page-number {
+		display: block !important;
+		color: #555555 !important;
+	}
+
+	/* Style continuation list items to hide bullets, numbers, and custom markers in printed PDF */
+	body.pdf-export-printing li.pdf-list-split-continuation,
+	body.pdf-export-printing ul > li.pdf-list-split-continuation,
+	body.pdf-export-printing ol > li.pdf-list-split-continuation {
+		list-style-type: none !important;
+		list-style: none !important;
+		background-image: none !important;
+		background: transparent !important;
+	}
+
+	body.pdf-export-printing li.pdf-list-split-continuation::marker,
+	body.pdf-export-printing ul > li.pdf-list-split-continuation::marker,
+	body.pdf-export-printing ol > li.pdf-list-split-continuation::marker {
+		content: "" !important;
+		display: none !important;
+	}
+
+	body.pdf-export-printing li.pdf-list-split-continuation::before,
+	body.pdf-export-printing ul > li.pdf-list-split-continuation::before,
+	body.pdf-export-printing ol > li.pdf-list-split-continuation::before,
+	body.pdf-export-printing li.pdf-list-split-continuation::after,
+	body.pdf-export-printing ul > li.pdf-list-split-continuation::after,
+	body.pdf-export-printing ol > li.pdf-list-split-continuation::after {
+		content: "" !important;
+		display: none !important;
+	}
+
+	body.pdf-export-printing li.pdf-list-split-continuation .task-list-item-checkbox {
+		display: none !important;
+	}
+}
