@@ -1,7 +1,7 @@
 {
 	"name": "obsidian-live-pdf-preview",
 	"version": "1.0.0",
-	"description": "Zero-latency real-time A4 PDF preview and export plugin for Obsidian.",
+	"description": "zero-latency, real-time a4 pdf preview & export plugin for obsidian with smart pagination and interactive outline bookmarks.",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {
@@ -11,7 +11,7 @@
 		"lint": "eslint ."
 	},
 	"keywords": [],
-	"license": "0-BSD",
+	"license": "MIT",
 	"devDependencies": {
 		"@eslint/js": "^9.39.4",
 		"@types/lodash-es": "^4.17.12",

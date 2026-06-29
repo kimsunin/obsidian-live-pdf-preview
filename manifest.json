@@ -5,6 +5,6 @@
 	"minAppVersion": "1.0.0",
 	"description": "Zero-latency, real-time A4 PDF preview in the right sidebar with page breaks and layout controls.",
 	"author": "kimsunin",
-	"authorUrl": "https://obsidian.md",
+	"authorUrl": "https://github.com/kimsunin",
 	"isDesktopOnly": true
 }
