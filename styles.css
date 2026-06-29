@@ -44,6 +44,26 @@
 	container-type: inline-size; /* Enable container query width (cqw) to query this container's width */
 }
 
+.pdf-preview-container.is-active {
+	position: relative !important;
+	visibility: visible !important;
+	opacity: 1 !important;
+	pointer-events: auto !important;
+	height: 100%;
+}
+
+.pdf-preview-container.is-inactive {
+	position: absolute !important;
+	top: 40px !important; /* Below the header */
+	left: 0 !important;
+	width: 100% !important;
+	height: calc(100% - 40px) !important;
+	visibility: hidden !important;
+	opacity: 0 !important;
+	pointer-events: none !important;
+	z-index: -9999 !important;
+}
+
 /* Master/render container (hidden from view but layouted offscreen for height measurement) */
 .pdf-preview-master {
 	position: absolute;

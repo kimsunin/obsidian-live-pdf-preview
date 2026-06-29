@@ -10,11 +10,13 @@ export function mergeConsecutiveElements(parent: HTMLElement) {
 		const current = children[i] as HTMLElement;
 		const next = children[i + 1] as HTMLElement;
 
-		if (
-			(current.tagName === 'OL' && next.tagName === 'OL') ||
-			(current.tagName === 'UL' && next.tagName === 'UL') ||
-			(current.tagName === 'P' && next.tagName === 'P')
-		) {
+		const isListMerge = (current.tagName === 'OL' && next.tagName === 'OL') ||
+		                    (current.tagName === 'UL' && next.tagName === 'UL');
+		
+		const isSplitTextMerge = current.tagName === next.tagName &&
+		                         next.getAttribute('data-split-continued') === 'true';
+
+		if (isListMerge || isSplitTextMerge) {
 			while (next.firstChild) {
 				current.appendChild(next.firstChild);
 			}
@@ -30,7 +32,7 @@ export function mergeConsecutiveElements(parent: HTMLElement) {
  * original upper/lower master containers.
  */
 export function restoreFromPages(
-	previewContainer: HTMLDivElement,
+	previewContainer: HTMLElement,
 	upperEl: HTMLDivElement,
 	lowerEl: HTMLDivElement
 ) {
@@ -183,6 +185,7 @@ export function splitElementAtOverflow(el: HTMLElement, maxContentBottom: number
 	nextEl.className = el.className;
 	nextEl.style.cssText = el.style.cssText;
 	nextEl.setAttribute('data-section', el.getAttribute('data-section') || '');
+	nextEl.setAttribute('data-split-continued', 'true');
 
 	while (el.firstChild) {
 		nextEl.appendChild(el.firstChild);

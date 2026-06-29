@@ -6,31 +6,41 @@ It streamlines your writing workflow by combining document editing and publicati
 
 ![Obsidian Live PDF Preview Main Screenshot](./assets/2026-06-29_layout.png)
 
+---
+
 ## 🌟 Who is this for?
-* Writers who compose **print-ready documents** like reports, resumes, proposals, and essays in Obsidian.
-* Users who want to **verify line wraps, margins, and page breaks in real-time** before exporting.
-* Anyone who wants their exported PDFs to automatically feature **click-navigable outlines/bookmarks** for easy reading.
+* **Writers** composing print-ready documents like reports, resumes, proposals, and essays directly in Obsidian.
+* **Publishers** who want to verify line wraps, margins, and page breaks in real-time before exporting.
+* **Readers** who want exported PDFs to automatically feature click-navigable outlines/bookmarks for easy reading.
+
+---
 
 ## ✨ Key Features
 
-### 1. Real-Time A4 Preview
+### 1. Zero-Flicker Real-Time Preview
 * A virtual A4 sheet (`210mm` x `297mm`) appears in the right sidebar, rendering your edits instantly.
+* **Twin-Canvas Page Flipping:** Powered by an atomic double-buffering architecture, the preview updates seamlessly as you type with absolutely **zero screen flashes or flickers**.
 * The preview scales and fits automatically when you expand or shrink the sidebar panel width.
 
-### 2. Smart Page Transitions & Pagination
-* Text blocks and list items that overflow the page boundary split cleanly **line-by-line onto the next page** instead of cutting off mid-character.
-* Continued list items across page breaks will omit duplicate bullet points or numbering prefixes.
-* Titles/Headings are automatically pushed to the next page if their following paragraphs do not fit on the current page, preventing orphan headings.
+### 2. Smart Edit-Position Scroll Sync
+* **Automatic Viewport Alignment:** The plugin detects your active cursor position. If you start editing a section that is out of the preview's viewport, it smoothly scrolls to align that block to the top of the preview screen.
+* **Intelligent Visibility Guard:** If your editing position is already visible on the screen, the scroll remains locked to prevent dizzying screen jitters while typing.
 
-### 3. Custom Page Breaks (`//page`)
-* Want to start a new page? Simply type **`//page`** on its own line in the editor, and the following content will begin on a fresh page.
+### 3. Smart Page Transitions & Pagination
+* Text blocks and list items that overflow the page boundary split cleanly **line-by-line onto the next page** instead of cutting off mid-character.
+* Continued list items across page breaks automatically omit duplicate bullet points or numbering prefixes for a clean publication format.
+* Headings are automatically pushed to the next page if their following paragraphs do not fit, preventing orphan headers.
+
+### 4. Custom Page Breaks (`//page`)
+* Want to start a new page? Simply type **`//page`** on its own line in the editor, and the subsequent content will begin on a fresh page instantly.
 
 ![Paging Screenshot](./assets/2026-06-29_paging.png)
 
-### 4. One-Click PDF Export with Bookmarks
+### 5. One-Click PDF Export with Outlines
 * Click the 🖨️ (printer icon) on the top right of the preview header to save your document as a PDF.
 * Document headings (`# H1` to `###### H6`) are automatically converted into **interactive PDF outlines (bookmarks)**, allowing readers to jump between sections in any PDF viewer.
-* The export process runs cleanly in the background without causing screen flashes or white-outs.
+
+---
 
 ## 🛠️ How to Use
 
@@ -48,6 +58,8 @@ Click the gear icon (⚙️) on the top right of the preview header to open page
 * **Show file name as title:** Automatically render the filename as the main document header.
 
 ![Page Layout Settings Modal](./assets/2026-06-29_setting.png)
+
+---
 
 ## 🌐 Multilingual Readme
 * [한국어 버전 (Korean Version)](./README.ko.md)

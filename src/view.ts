@@ -6,7 +6,15 @@ import { ExportPdfModal, exportToPdf } from './export';
 export const VIEW_TYPE_PDF_PREVIEW = 'live-pdf-preview-view';
 
 export class PdfPreviewView extends ItemView {
-	private previewContainer!: HTMLDivElement;
+	private containerA!: HTMLDivElement;
+	private containerB!: HTMLDivElement;
+	private activeContainer!: HTMLDivElement;
+	private inactiveContainer!: HTMLDivElement;
+
+	get previewContainer(): HTMLDivElement {
+		return this.activeContainer;
+	}
+
 	private masterContainer!: HTMLDivElement;
 	private upperEl!: HTMLDivElement;
 	private lowerEl!: HTMLDivElement;
@@ -82,10 +90,16 @@ export class PdfPreviewView extends ItemView {
 			this.exportToPdf();
 		});
 
-		// Create root container for A4 canvas (no theme-light here, so the panel and controls follow the active theme)
-		this.previewContainer = container.createEl('div', {
-			cls: 'pdf-preview-container',
+		// Create Twin Preview Containers (Phase 7 Robust Flicker-free)
+		this.containerA = container.createEl('div', {
+			cls: 'pdf-preview-container is-active',
 		});
+		this.containerB = container.createEl('div', {
+			cls: 'pdf-preview-container is-inactive',
+		});
+
+		this.activeContainer = this.containerA;
+		this.inactiveContainer = this.containerB;
 
 		// Create the master render container (hidden offscreen)
 		this.masterContainer = container.createEl('div', {
@@ -122,12 +136,13 @@ export class PdfPreviewView extends ItemView {
 		// Add a ResizeObserver to trigger postProcess when the view is attached and sized
 		this.resizeObserver = new ResizeObserver(
 			debounce(() => {
-				if (this.previewContainer && this.previewContainer.offsetHeight > 0) {
-					this.postProcess();
+				if (this.activeContainer && this.activeContainer.offsetHeight > 0) {
+					this.postProcess(this.activeContainer);
 				}
 			}, 100)
 		);
-		this.resizeObserver.observe(this.previewContainer);
+		this.resizeObserver.observe(this.containerA);
+		this.resizeObserver.observe(this.containerB);
 
 		// Initial render of current active file
 		const activeFile = this.app.workspace.getActiveFile();
@@ -172,7 +187,57 @@ export class PdfPreviewView extends ItemView {
 	 * Helper to restore DOM elements from pages back to upper/lower master elements.
 	 */
 	private restoreFromPages() {
-		restoreFromPages(this.previewContainer, this.upperEl, this.lowerEl);
+		if (!this.activeContainer) return;
+
+		const currentWrappers = Array.from(this.activeContainer.querySelectorAll('.pdf-page-wrapper'));
+		if (currentWrappers.length > 0) {
+			const originalHolder = document.createElement('div');
+			for (const w of currentWrappers) {
+				// Clone node to maintain the visible layout while offscreen rendering runs
+				const clone = w.cloneNode(true);
+				this.activeContainer.insertBefore(clone, w);
+				originalHolder.appendChild(w);
+			}
+			restoreFromPages(originalHolder, this.upperEl, this.lowerEl);
+		} else {
+			restoreFromPages(this.activeContainer, this.upperEl, this.lowerEl);
+		}
+	}
+
+	private swapContainers(savedScrollTop: number) {
+		if (this.inactiveContainer) {
+			this.inactiveContainer.scrollTop = savedScrollTop;
+		}
+
+		this.activeContainer.classList.remove('is-active');
+		this.activeContainer.classList.add('is-inactive');
+
+		this.inactiveContainer.classList.remove('is-inactive');
+		this.inactiveContainer.classList.add('is-active');
+
+		const temp = this.activeContainer;
+		this.activeContainer = this.inactiveContainer;
+		this.inactiveContainer = temp;
+
+		// Clean up memory and cloned nodes in the old active container
+		this.inactiveContainer.empty();
+	}
+
+	private scrollToActiveSection() {
+		if (!this.activeContainer) return;
+		const firstLowerEl = this.activeContainer.querySelector('[data-section="lower"]');
+		if (firstLowerEl) {
+			const containerRect = this.activeContainer.getBoundingClientRect();
+			const elRect = firstLowerEl.getBoundingClientRect();
+
+			// Check if the element is already fully visible within the container viewport
+			const isVisible = elRect.top >= containerRect.top && elRect.bottom <= containerRect.bottom;
+
+			if (!isVisible) {
+				// Only scroll to the top smoothly if it is not currently visible
+				firstLowerEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+			}
+		}
 	}
 
 	public async renderFull() {
@@ -182,6 +247,8 @@ export class PdfPreviewView extends ItemView {
 			this.lowerEl.empty();
 			return;
 		}
+
+		const savedScrollTop = this.activeContainer ? this.activeContainer.scrollTop : 0;
 
 		this.restoreFromPages();
 		
@@ -203,7 +270,8 @@ export class PdfPreviewView extends ItemView {
 
 		await MarkdownRenderer.render(this.app, text, this.lowerEl, sourcePath, this.lowerComponent);
 
-		this.postProcess();
+		this.postProcess(this.inactiveContainer);
+		this.swapContainers(savedScrollTop);
 	}
 
 	/**
@@ -212,6 +280,8 @@ export class PdfPreviewView extends ItemView {
 	 */
 	private async renderPartial() {
 		if (!this.currentFile) return;
+
+		const savedScrollTop = this.activeContainer ? this.activeContainer.scrollTop : 0;
 
 		// Find the workspace leaf displaying the current file to read its contents
 		let targetView: any = null;
@@ -272,7 +342,9 @@ export class PdfPreviewView extends ItemView {
 			this.cachedUpperText = upperText;
 		}
 
-		this.postProcess();
+		this.postProcess(this.inactiveContainer);
+		this.swapContainers(savedScrollTop);
+		this.scrollToActiveSection();
 	}
 
 	/**
@@ -294,11 +366,11 @@ export class PdfPreviewView extends ItemView {
 
 	// --- Post-processing (Phase 4) ---
 
-	private postProcess() {
+	private postProcess(targetContainer: HTMLDivElement = this.activeContainer) {
 		if (!this.upperEl || !this.lowerEl) return;
 		applyPageBreaks(this.upperEl, this.lowerEl);
 		applyVirtualPagination({
-			previewContainer: this.previewContainer,
+			previewContainer: targetContainer,
 			upperEl: this.upperEl,
 			lowerEl: this.lowerEl,
 			showPageNumbers: this.showPageNumbers,
