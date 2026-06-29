@@ -8,14 +8,14 @@ It streamlines your writing workflow by combining document editing and publicati
 
 ---
 
-## 🌟 Who is this for?
+## Who is this for?
 * **Writers** composing print-ready documents like reports, resumes, proposals, and essays directly in Obsidian.
 * **Publishers** who want to verify line wraps, margins, and page breaks in real-time before exporting.
 * **Readers** who want exported PDFs to automatically feature click-navigable outlines/bookmarks for easy reading.
 
 ---
 
-## ✨ Key Features
+## Key Features
 
 ### 1. Zero-Flicker Real-Time Preview
 * A virtual A4 sheet (`210mm` x `297mm`) appears in the right sidebar, rendering your edits instantly.
@@ -42,7 +42,7 @@ It streamlines your writing workflow by combining document editing and publicati
 
 ---
 
-## 🛠️ How to Use
+## How to Use
 
 ### 1. Launching the Preview
 1. Open the Obsidian Command Palette (`Cmd/Ctrl + P`).
@@ -61,5 +61,5 @@ Click the gear icon (⚙️) on the top right of the preview header to open page
 
 ---
 
-## 🌐 Multilingual Readme
+## Multilingual Readme
 * [한국어 버전 (Korean Version)](./README.ko.md)
