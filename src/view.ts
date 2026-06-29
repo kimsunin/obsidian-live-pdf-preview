@@ -240,6 +240,64 @@ export class PdfPreviewView extends ItemView {
 		}
 	}
 
+	private fixHorizontalRules(text: string, cursorLine?: number): { text: string; cursorLine?: number } {
+		const lines = text.split('\n');
+		let adjustedCursor = cursorLine;
+
+		// Check if document has YAML Frontmatter
+		let inFrontmatter = false;
+		let frontmatterEndIndex = -1;
+		if (lines.length > 0 && lines[0] !== undefined && lines[0].trim() === '---') {
+			inFrontmatter = true;
+			// Find the closing '---'
+			for (let i = 1; i < lines.length; i++) {
+				const line = lines[i];
+				if (line !== undefined && line.trim() === '---') {
+					frontmatterEndIndex = i;
+					break;
+				}
+			}
+		}
+
+		for (let i = 0; i < lines.length - 1; i++) {
+			// Skip processing inside the YAML frontmatter block (start and end boundaries included)
+			if (inFrontmatter && i <= frontmatterEndIndex) {
+				continue;
+			}
+
+			const line = lines[i];
+			if (line !== undefined && i > 0 && /^(?:-{3,}|\*{3,}|_{3,})$/.test(line.trim())) {
+				// Count how many empty lines follow the horizontal rule
+				let emptyLineCount = 0;
+				while (i + 1 + emptyLineCount < lines.length) {
+					const nextLine = lines[i + 1 + emptyLineCount];
+					if (nextLine !== undefined && nextLine.trim() === '') {
+						emptyLineCount++;
+					} else {
+						break;
+					}
+				}
+
+				// Ensure at least 2 empty lines follow horizontal rules to prevent rendering glitches.
+				const requiredNewlines = 2 - emptyLineCount;
+				if (requiredNewlines > 0) {
+					for (let j = 0; j < requiredNewlines; j++) {
+						lines.splice(i + 1, 0, '');
+						if (adjustedCursor !== undefined && i < adjustedCursor) {
+							adjustedCursor++;
+						}
+						// Adjust frontmatter index if we inserted a line before it
+						if (frontmatterEndIndex !== -1 && i < frontmatterEndIndex) {
+							frontmatterEndIndex++;
+						}
+					}
+					i += requiredNewlines;
+				}
+			}
+		}
+		return { text: lines.join('\n'), cursorLine: adjustedCursor };
+	}
+
 	public async renderFull() {
 		if (!this.currentFile) {
 			this.restoreFromPages();
@@ -255,6 +313,9 @@ export class PdfPreviewView extends ItemView {
 		// Read the file directly from the Vault (always correct, no race conditions with editor loading)
 		let text = await this.app.vault.read(this.currentFile);
 		const sourcePath = this.currentFile.path;
+
+		// Preprocess horizontal rules to guarantee at least 2 trailing empty lines for rendering safety
+		text = this.fixHorizontalRules(text).text;
 
 		if (this.showTitle) {
 			text = `# ${this.currentFile.basename}\n\n` + text;
@@ -298,6 +359,11 @@ export class PdfPreviewView extends ItemView {
 		let text = editor.getValue();
 		const sourcePath = this.currentFile.path;
 		let cursorLine = editor.getCursor().line;
+
+		// Preprocess horizontal rules to guarantee at least 2 trailing empty lines for rendering safety
+		const fixed = this.fixHorizontalRules(text, cursorLine);
+		text = fixed.text;
+		cursorLine = fixed.cursorLine || cursorLine;
 
 		if (this.showTitle) {
 			text = `# ${this.currentFile.basename}\n\n` + text;
