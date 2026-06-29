@@ -29,7 +29,6 @@ It streamlines your writing workflow by combining document editing and publicati
 ### 3. Smart Page Transitions & Pagination
 * Text blocks and list items that overflow the page boundary split cleanly **line-by-line onto the next page** instead of cutting off mid-character.
 * Continued list items across page breaks automatically omit duplicate bullet points or numbering prefixes for a clean publication format.
-* Headings are automatically pushed to the next page if their following paragraphs do not fit, preventing orphan headers.
 
 ### 4. Custom Page Breaks (`//page`)
 * Want to start a new page? Simply type **`//page`** on its own line in the editor, and the subsequent content will begin on a fresh page instantly.

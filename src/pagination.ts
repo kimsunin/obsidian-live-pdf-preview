@@ -125,7 +125,7 @@ function getTextNodeAndOffset(parent: Node, targetOffset: number): { node: Text;
  * Returns the overflow portion as a new element, or null if splitting isn't possible.
  */
 export function splitElementAtOverflow(el: HTMLElement, maxContentBottom: number): HTMLElement | null {
-	if (!['P', 'LI', 'BLOCKQUOTE'].includes(el.tagName)) {
+	if (!['P', 'LI', 'BLOCKQUOTE', 'PRE'].includes(el.tagName)) {
 		return null;
 	}
 
@@ -171,6 +171,16 @@ export function splitElementAtOverflow(el: HTMLElement, maxContentBottom: number
 
 	if (bestOffset === 0) {
 		return null;
+	}
+
+	// For PRE code blocks, snap the split offset to the nearest preceding newline character
+	// so that code lines are never split mid-character horizontally.
+	if (el.tagName === 'PRE') {
+		const textContent = el.textContent || '';
+		const lastNewLine = textContent.lastIndexOf('\n', bestOffset);
+		if (lastNewLine !== -1) {
+			bestOffset = lastNewLine + 1; // Split right after the newline
+		}
 	}
 
 	const splitPoint = getTextNodeAndOffset(el, bestOffset);
@@ -348,21 +358,6 @@ export function applyVirtualPagination(config: PaginationConfig) {
 		const isFirstElement = (currentPage.children.length <= 1);
 		let shouldMove = (!isFirstElement && totalBottom > maxContentBottom);
 
-		// Prevent orphan headings
-		if (!shouldMove && !isFirstElement && /^H[1-6]$/.test(el.tagName)) {
-			const nextEl = allElements[allElements.indexOf(el) + 1];
-			if (nextEl) {
-				currentPage.appendChild(nextEl);
-				const nextBottom = nextEl.offsetTop + nextEl.offsetHeight;
-				const nextStyle = window.getComputedStyle(nextEl);
-				const nextMarginBottom = parseFloat(nextStyle.marginBottom) || 0;
-				currentPage.removeChild(nextEl);
-
-				if (nextBottom + nextMarginBottom > maxContentBottom) {
-					shouldMove = true;
-				}
-			}
-		}
 
 		if (shouldMove) {
 			const nextEl = splitElementAtOverflow(el, maxContentBottom);
