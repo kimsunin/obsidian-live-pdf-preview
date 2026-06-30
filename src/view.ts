@@ -1,5 +1,4 @@
-import { Component, ItemView, MarkdownRenderer, WorkspaceLeaf, TFile, setIcon } from 'obsidian';
-import { debounce } from 'lodash-es';
+import { Component, ItemView, MarkdownRenderer, WorkspaceLeaf, TFile, setIcon, debounce, MarkdownView } from 'obsidian';
 import { restoreFromPages, applyPageBreaks, applyVirtualPagination } from './pagination';
 import { ExportPdfModal, exportToPdf } from './export';
 
@@ -34,7 +33,7 @@ export class PdfPreviewView extends ItemView {
 	private resizeObserver: ResizeObserver | null = null;
 
 	private debouncedRender = debounce(() => {
-		this.renderPartial();
+		void this.renderPartial();
 	}, 150);
 
 	constructor(leaf: WorkspaceLeaf) {
@@ -87,7 +86,7 @@ export class PdfPreviewView extends ItemView {
 
 		// Export PDF button (printer icon) immediately exports!
 		exportBtn.addEventListener('click', () => {
-			this.exportToPdf();
+			void this.exportToPdf();
 		});
 
 		// Create Twin Preview Containers (Phase 7 Robust Flicker-free)
@@ -178,7 +177,7 @@ export class PdfPreviewView extends ItemView {
 		if (file === this.currentFile) return;
 		this.currentFile = file;
 		this.cachedUpperText = '';
-		this.renderFull();
+		void this.renderFull();
 	}
 
 	// --- Rendering ---
@@ -191,7 +190,7 @@ export class PdfPreviewView extends ItemView {
 
 		const currentWrappers = Array.from(this.activeContainer.querySelectorAll('.pdf-page-wrapper'));
 		if (currentWrappers.length > 0) {
-			const originalHolder = document.createElement('div');
+			const originalHolder = activeDocument.createElement('div');
 			for (const w of currentWrappers) {
 				// Clone node to maintain the visible layout while offscreen rendering runs
 				const clone = w.cloneNode(true);
@@ -345,17 +344,22 @@ export class PdfPreviewView extends ItemView {
 		const savedScrollTop = this.activeContainer ? this.activeContainer.scrollTop : 0;
 
 		// Find the workspace leaf displaying the current file to read its contents
-		let targetView: any = null;
+		let targetView: MarkdownView | null = null;
 		this.app.workspace.iterateAllLeaves((leaf) => {
-			if (leaf.view.getViewType() === 'markdown' && (leaf.view as any).file === this.currentFile) {
-				targetView = leaf.view;
+			if (leaf.view.getViewType() === 'markdown') {
+				const mdView = leaf.view as MarkdownView;
+				if (mdView.file === this.currentFile) {
+					targetView = mdView;
+				}
 			}
 		});
 
 		if (!targetView) return;
 
+		const activeView = targetView as MarkdownView;
+
 		this.restoreFromPages();
-		const editor = targetView.editor;
+		const editor = activeView.editor;
 		let text = editor.getValue();
 		const sourcePath = this.currentFile.path;
 		let cursorLine = editor.getCursor().line;

@@ -69,7 +69,7 @@ export function applyPageBreaks(upperEl: HTMLDivElement, lowerEl: HTMLDivElement
 		const paragraphs = Array.from(section.querySelectorAll('p'));
 		for (const p of paragraphs) {
 			if (/^\s*\/\/page\s*$/.test(p.textContent || '')) {
-				const breakEl = document.createElement('div');
+				const breakEl = activeDocument.createElement('div');
 				breakEl.className = 'pdf-page-break';
 				p.replaceWith(breakEl);
 			}
@@ -81,9 +81,9 @@ export function applyPageBreaks(upperEl: HTMLDivElement, lowerEl: HTMLDivElement
  * Converts mm to pixels based on current display scaling/zoom.
  */
 export function measurePx(mm: number): number {
-	const temp = document.createElement('div');
+	const temp = activeDocument.createElement('div');
 	temp.style.cssText = `height: ${mm}mm; position: absolute; visibility: hidden;`;
-	document.body.appendChild(temp);
+	activeDocument.body.appendChild(temp);
 	const height = temp.offsetHeight;
 	temp.remove();
 	return height;
@@ -106,7 +106,7 @@ export function createPageElement(previewContainer: HTMLDivElement): HTMLDivElem
 
 function getTextNodeAndOffset(parent: Node, targetOffset: number): { node: Text; offset: number } | null {
 	let currentOffset = 0;
-	const walker = document.createTreeWalker(parent, NodeFilter.SHOW_TEXT);
+	const walker = activeDocument.createTreeWalker(parent, NodeFilter.SHOW_TEXT);
 	let node: Node | null;
 	while ((node = walker.nextNode())) {
 		const textNode = node as Text;
@@ -132,7 +132,8 @@ export function splitElementAtOverflow(el: HTMLElement, maxContentBottom: number
 	const totalLength = el.textContent?.length || 0;
 	if (totalLength === 0) return null;
 
-	const originalHTML = el.innerHTML;
+	// Clone child nodes to capture original state without using innerHTML
+	const originalChildren = Array.from(el.childNodes).map(node => node.cloneNode(true));
 
 	const originalBottom = el.offsetTop + el.offsetHeight;
 	if (originalBottom <= maxContentBottom) {
@@ -145,11 +146,14 @@ export function splitElementAtOverflow(el: HTMLElement, maxContentBottom: number
 
 	while (low <= high) {
 		const mid = Math.floor((low + high) / 2);
-		el.innerHTML = originalHTML;
+		
+		// Restore element contents using original child clones
+		el.empty();
+		originalChildren.forEach(child => el.appendChild(child.cloneNode(true)));
 
 		const splitPoint = getTextNodeAndOffset(el, mid);
 		if (splitPoint) {
-			const tempRange = document.createRange();
+			const tempRange = activeDocument.createRange();
 			tempRange.setStart(splitPoint.node, splitPoint.offset);
 			tempRange.setEndAfter(el.lastChild!);
 			const extracted = tempRange.extractContents();
@@ -167,7 +171,9 @@ export function splitElementAtOverflow(el: HTMLElement, maxContentBottom: number
 		}
 	}
 
-	el.innerHTML = originalHTML;
+	// Restore back to original state for clean slicing using exact text node references
+	el.empty();
+	originalChildren.forEach(child => el.appendChild(child.cloneNode(true)));
 
 	if (bestOffset === 0) {
 		return null;
@@ -186,12 +192,12 @@ export function splitElementAtOverflow(el: HTMLElement, maxContentBottom: number
 	const splitPoint = getTextNodeAndOffset(el, bestOffset);
 	if (!splitPoint) return null;
 
-	const range = document.createRange();
+	const range = activeDocument.createRange();
 	range.setStart(el, 0);
 	range.setEnd(splitPoint.node, splitPoint.offset);
 	const firstPartFragment = range.extractContents();
 
-	const nextEl = document.createElement(el.tagName);
+	const nextEl = activeDocument.createElement(el.tagName);
 	nextEl.className = el.className;
 	nextEl.style.cssText = el.style.cssText;
 	nextEl.setAttribute('data-section', el.getAttribute('data-section') || '');
@@ -202,7 +208,7 @@ export function splitElementAtOverflow(el: HTMLElement, maxContentBottom: number
 	}
 
 	// Mark the first nested LI as a continuation (hides bullet/number)
-	const walker = document.createTreeWalker(nextEl, NodeFilter.SHOW_TEXT);
+	const walker = activeDocument.createTreeWalker(nextEl, NodeFilter.SHOW_TEXT);
 	const firstTextNode = walker.nextNode();
 	if (firstTextNode) {
 		let parentLi = firstTextNode.parentElement;
@@ -295,7 +301,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 			const listItems = Array.from(el.children) as HTMLElement[];
 			const sectionAttr = el.getAttribute('data-section') || '';
 
-			let currentListContainer = currentPage.createEl(listType as any);
+			let currentListContainer = currentPage.createEl(listType as keyof HTMLElementTagNameMap);
 			currentListContainer.className = el.className;
 			currentListContainer.style.cssText = el.style.cssText;
 			currentListContainer.setAttribute('data-section', sectionAttr);
@@ -328,7 +334,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 
 					currentPage = createPageElement(previewContainer);
 
-					currentListContainer = currentPage.createEl(listType as any);
+					currentListContainer = currentPage.createEl(listType as keyof HTMLElementTagNameMap);
 					currentListContainer.className = el.className;
 					currentListContainer.style.cssText = el.style.cssText;
 					currentListContainer.setAttribute('data-section', sectionAttr);

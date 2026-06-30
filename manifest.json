@@ -3,7 +3,7 @@
 	"name": "Live PDF Preview",
 	"version": "1.0.0",
 	"minAppVersion": "1.0.0",
-	"description": "Zero-latency, real-time A4 PDF preview in the right sidebar with page breaks and layout controls.",
+	"description": "zero-latency, real-time a4 pdf preview & export plugin for obsidian with smart pagination and interactive outline bookmarks.",
 	"author": "kimsunin",
 	"authorUrl": "https://github.com/kimsunin",
 	"isDesktopOnly": true

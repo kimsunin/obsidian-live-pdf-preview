@@ -26,7 +26,6 @@
 		"typescript-eslint": "^8.59.1"
 	},
 	"dependencies": {
-		"lodash-es": "^4.18.1",
 		"pdf-lib": "^1.17.1"
 	}
 }

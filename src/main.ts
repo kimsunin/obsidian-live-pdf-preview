@@ -11,22 +11,21 @@ export default class LivePdfPreviewPlugin extends Plugin {
 
 		// Command to open the view
 		this.addCommand({
-			id: 'open-live-pdf-preview',
-			name: 'Open Live PDF Preview',
+			id: 'open-preview',
+			name: 'Open preview',
 			callback: () => {
-				this.activateView(true);
+				void this.activateView(true);
 			},
 		});
 
 		// Automatically place the view in the right sidebar once the layout is ready
 		this.app.workspace.onLayoutReady(() => {
-			this.initView();
+			void this.initView();
 		});
 	}
 
 	onunload() {
 		// Clean up when plugin is disabled
-		this.app.workspace.detachLeavesOfType(VIEW_TYPE_PDF_PREVIEW);
 	}
 
 	// Quietly create the leaf in the right sidebar so the tab icon appears
@@ -62,7 +61,7 @@ export default class LivePdfPreviewPlugin extends Plugin {
 		}
 
 		if (leaf && focus) {
-			workspace.revealLeaf(leaf);
+			workspace.setActiveLeaf(leaf, { focus: true });
 		}
 	}
 }

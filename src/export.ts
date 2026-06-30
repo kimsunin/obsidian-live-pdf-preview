@@ -3,6 +3,33 @@ import { PDFDocument } from 'pdf-lib';
 import { addOutline } from './pdf-outline';
 import type { PdfPreviewView } from './view';
 
+interface ElectronWebContents {
+	printToPDF(options: {
+		marginsType: number;
+		pageSize: string;
+		printBackground: boolean;
+		landscape: boolean;
+		scale: number;
+	}): Promise<ArrayBuffer>;
+}
+
+interface ElectronModule {
+	remote: {
+		getCurrentWebContents(): ElectronWebContents;
+		dialog: {
+			showSaveDialog(options: {
+				title: string;
+				defaultPath: string;
+				filters: { name: string; extensions: string[] }[];
+			}): Promise<{ canceled: boolean; filePath?: string }>;
+		};
+	};
+}
+
+interface NodeFS {
+	writeFileSync(path: string, data: Uint8Array): void;
+}
+
 export class ExportPdfModal extends Modal {
 	private view: PdfPreviewView;
 
@@ -88,7 +115,7 @@ export class ExportPdfModal extends Modal {
 					.onChange(value => {
 						this.view.showTitle = value;
 						this.view.cachedUpperText = ''; // Force redraw
-						this.view.renderFull();
+						void this.view.renderFull();
 					});
 			});
 
@@ -125,7 +152,11 @@ export async function exportToPdf(config: ExportConfig) {
 	new Notice('Preparing PDF export...');
 
 	try {
-		const electron = (window as any).require('electron');
+		const globalWindow = window as unknown as { 
+			require(module: 'electron'): ElectronModule; 
+			require(module: 'fs'): NodeFS; 
+		};
+		const electron = globalWindow.require('electron');
 		const webContents = electron.remote ? electron.remote.getCurrentWebContents() : null;
 
 		if (!webContents) {
@@ -137,14 +168,16 @@ export async function exportToPdf(config: ExportConfig) {
 		printClone.classList.add('pdf-print-clone');
 
 		// Append to body temporarily so it is a direct child of body and unaffected by parent layout clipping/hiding
-		document.body.appendChild(printClone);
+		activeDocument.body.appendChild(printClone);
 
 		// 1. Add printing class to body to apply print-only styles
-		document.body.classList.add('pdf-export-printing');
+		activeDocument.body.classList.add('pdf-export-printing');
 
 		// Force a browser DOM style reflow and wait for layout to repaint completely
-		document.body.offsetHeight;
-		await new Promise(resolve => setTimeout(resolve, 100));
+		const _reflow = activeDocument.body.offsetHeight;
+		await new Promise<void>(resolve => {
+			window.setTimeout(resolve, 100);
+		});
 
 		// 2. Call printToPDF
 		const options = {
@@ -155,12 +188,12 @@ export async function exportToPdf(config: ExportConfig) {
 			scale: scale / 100,
 		};
 
-		let data;
+		let data: ArrayBuffer;
 		try {
 			data = await webContents.printToPDF(options);
 		} finally {
 			// 3. Remove printing class and clean up the clone node immediately
-			document.body.classList.remove('pdf-export-printing');
+			activeDocument.body.classList.remove('pdf-export-printing');
 			printClone.remove();
 		}
 
@@ -194,14 +227,14 @@ export async function exportToPdf(config: ExportConfig) {
 		});
 
 		if (!result.canceled && result.filePath) {
-			const fs = (window as any).require('fs');
+			const fs = globalWindow.require('fs');
 			fs.writeFileSync(result.filePath, finalPdfBytes);
 			new Notice(`PDF successfully exported to: ${result.filePath}`);
 		}
 	} catch (error) {
 		console.error('PDF export failed:', error);
 		// Safe cleanup
-		document.body.classList.remove('pdf-export-printing');
+		activeDocument.body.classList.remove('pdf-export-printing');
 		const msg = error instanceof Error ? error.message : String(error);
 		new Notice('Failed to export PDF: ' + msg);
 	}
