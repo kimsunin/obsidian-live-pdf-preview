@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-live-pdf-preview",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "zero-latency, real-time a4 pdf preview & export plugin for obsidian with smart pagination and interactive outline bookmarks.",
 	"main": "main.js",
 	"type": "module",
