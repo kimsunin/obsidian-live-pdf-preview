@@ -7,7 +7,7 @@ An Obsidian plugin that lets you edit Markdown documents while **viewing a real-
 
 It streamlines your writing workflow by combining document editing and publication layout design into one seamless process.
 
-![Obsidian Live PDF Preview Main Screenshot](2026-06-30_layout.png)
+![Obsidian Live PDF Preview Main Screenshot](./assets/2026-06-30_layout.png)
 
 ## Who is this for?
 
@@ -37,7 +37,7 @@ It streamlines your writing workflow by combining document editing and publicati
 
 - Want to start a new page? Simply type **`//page`** on its own line in the editor, and the subsequent content will begin on a fresh page instantly.
 
-![Paging Screenshot](2026-06-30_paging.png)
+![Paging Screenshot](./assets/2026-06-30_paging.png)
 
 ### 5. One-Click PDF Export with Outlines
 
@@ -64,7 +64,7 @@ Click the gear icon (⚙️) on the top right of the preview header to open page
 - **Landscape:** Toggle between Portrait and Landscape layouts.
 - **Show file name as title:** Automatically render the filename as the main document header.
 
-![Page Layout Settings Modal](2026-06-30_setting.png)
+![Page Layout Settings Modal](./assets/2026-06-30_setting.png)
 
 ## Multilingual Readme
 
