@@ -38,6 +38,8 @@ It streamlines your writing workflow by combining document editing and publicati
 ### 5. One-Click PDF Export with Outlines
 * Click the 🖨️ (printer icon) on the top right of the preview header to save your document as a PDF.
 * Document headings (`# H1` to `###### H6`) are automatically converted into **interactive PDF outlines (bookmarks)**, allowing readers to jump between sections in any PDF viewer.
+* **Unicode Outline Support:** Fully supports non-ASCII / Unicode characters (like Korean, CJK, etc.) in the PDF Outline navigation tree without text corruption.
+* **Clean Print Layout:** Obsidian's default code block copy buttons are automatically hidden inside both the A4 preview screen and the exported PDF to ensure visual publication quality.
 
 ---
 
