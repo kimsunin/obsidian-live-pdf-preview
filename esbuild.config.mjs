@@ -11,7 +11,7 @@ if you want to view the source, please visit the github repository of this plugi
 
 const prod = process.argv[2] === 'production';
 
-// Custom plugin to copy manifest.json and styles.css to build/ directory
+// Custom plugin to copy manifest.json and styles.css to build/ directory, and sync to active Obsidian vault if available
 const copyFilesPlugin = {
 	name: 'copy-files',
 	setup(build) {
@@ -25,6 +25,20 @@ const copyFilesPlugin = {
 					fs.copyFileSync('styles.css', 'build/styles.css');
 				}
 				console.log('Required files successfully copied to build/ directory.');
+
+				// Automatically copy compiled assets directly to active Obsidian vault plugins folder
+				const vaultPluginDir = '../../../.obsidian/plugins/build';
+				if (fs.existsSync('../../../.obsidian/plugins')) {
+					if (!fs.existsSync(vaultPluginDir)) {
+						fs.mkdirSync(vaultPluginDir, { recursive: true });
+					}
+					fs.copyFileSync('build/main.js', `${vaultPluginDir}/main.js`);
+					fs.copyFileSync('build/manifest.json', `${vaultPluginDir}/manifest.json`);
+					if (fs.existsSync('build/styles.css')) {
+						fs.copyFileSync('build/styles.css', `${vaultPluginDir}/styles.css`);
+					}
+					console.log(`Plugin assets successfully synced to local Obsidian vault: ${vaultPluginDir}`);
+				}
 			} catch (err) {
 				console.error('Error copying build files:', err);
 			}

@@ -1,4 +1,4 @@
-import { PDFDocument, PDFName, PDFNumber, PDFRef, PDFString, PDFDict } from 'pdf-lib';
+import { PDFDocument, PDFName, PDFNumber, PDFRef, PDFString, PDFDict, PDFHexString } from 'pdf-lib';
 
 interface OutlineItem {
 	text: string;
@@ -20,7 +20,7 @@ export async function addOutline(pdfDoc: PDFDocument, bookmarks: { text: string;
 	const items: OutlineItem[] = bookmarks.map(b => {
 		const ref = context.nextRef();
 		const dict = context.obj({
-			Title: PDFString.of(b.text),
+			Title: PDFHexString.fromText(b.text),
 			Dest: context.obj([pageRefs[b.pageIndex] || pageRefs[0], PDFName.of('Fit')]),
 		});
 		return {

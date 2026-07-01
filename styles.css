@@ -390,3 +390,9 @@ li.pdf-list-split-continuation::after {
 		display: none !important;
 	}
 }
+
+/* Hide Obsidian's default copy-code-button inside A4 preview and printed PDF */
+.pdf-preview-page .copy-code-button,
+.pdf-print-clone .copy-code-button {
+	display: none !important;
+}
