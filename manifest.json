@@ -1,7 +1,7 @@
 {
 	"id": "live-pdf-preview",
 	"name": "Live PDF Preview",
-	"version": "1.0.3",
+	"version": "1.0.4",
 	"minAppVersion": "1.0.0",
 	"description": "Zero-latency, real-time A4 PDF preview & export plugin with smart pagination and interactive outline bookmarks.",
 	"author": "kimsunin",
