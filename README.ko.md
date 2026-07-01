@@ -7,7 +7,7 @@ Obsidian에서 문서를 편집하면서 **실제 인쇄물(A4) 형식의 레이
 
 문서 작성과 인쇄 편집(출판 레이아웃)을 동시에 처리해 주는 편리한 문서 도구입니다.
 
-![Obsidian Live PDF Preview Main Screenshot](./assets/2026-06-30_layout.png?v=1)
+![Obsidian Live PDF Preview Main Screenshot](./assets/2026-06-30_layout.png)
 
 ## 이런 분들께 추천합니다!
 
@@ -37,7 +37,7 @@ Obsidian에서 문서를 편집하면서 **실제 인쇄물(A4) 형식의 레이
 
 - 글을 쓰다가 다음 페이지로 내용을 넘기고 싶다면, 줄의 맨 앞에 **`//page`**를 입력하세요. 해당 위치 뒤로는 무조건 다음 페이지의 첫 줄부터 작성됩니다.
 
-![Paging Screenshot](./assets/2026-06-30_paging.png?v=1)
+![Paging Screenshot](./assets/2026-06-30_paging.png)
 
 ### 5. 클릭 한 번으로 PDF 내보내기 (목차 책갈피 포함)
 
@@ -64,7 +64,7 @@ Obsidian에서 문서를 편집하면서 **실제 인쇄물(A4) 형식의 레이
 - **Landscape (가로 출력):** 용지를 가로 방향으로 눕히고 싶을 때 설정.
 - **Show file name as title:** 파일 이름을 문서 맨 위에 대제목으로 자동 포함할지 여부 설정.
 
-![Page Layout Settings Modal](./assets/2026-06-30_setting.png?v=1)
+![Page Layout Settings Modal](./assets/2026-06-30_setting.png)
 
 ## Multilingual Readme
 
