@@ -1,19 +1,18 @@
 # Obsidian Live PDF Preview
 
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/kimsunin/obsidian-live-pdf-preview?color=6c5ce7)](https://github.com/kimsunin/obsidian-live-pdf-preview/releases)
+[![Obsidian Downloads](https://img.shields.io/badge/dynamic/json?logo=obsidian&color=6c5ce7&label=downloads&query=%24.live-pdf-preview.downloads&url=https%3A%2F%2Fraw.githubusercontent.com%2Fobsidianmd%2Fobsidian-releases%2Fmaster%2Fcommunity-plugin-stats.json)](https://obsidian.md/plugins?id=live-pdf-preview)
+
 An Obsidian plugin that lets you edit Markdown documents while **viewing a real-time, print-formatted A4 preview in the sidebar**, and **exports them into high-quality PDFs with interactive navigation bookmarks in one click**.
 
 It streamlines your writing workflow by combining document editing and publication layout design into one seamless process.
 
 ![Obsidian Live PDF Preview Main Screenshot](./assets/2026-06-29_layout.png)
 
----
-
 ## Who is this for?
 * **Writers** composing print-ready documents like reports, resumes, proposals, and essays directly in Obsidian.
 * **Publishers** who want to verify line wraps, margins, and page breaks in real-time before exporting.
 * **Readers** who want exported PDFs to automatically feature click-navigable outlines/bookmarks for easy reading.
-
----
 
 ## Key Features
 
@@ -41,8 +40,6 @@ It streamlines your writing workflow by combining document editing and publicati
 * **Unicode Outline Support:** Fully supports non-ASCII / Unicode characters (like Korean, CJK, etc.) in the PDF Outline navigation tree without text corruption.
 * **Clean Print Layout:** Obsidian's default code block copy buttons are automatically hidden inside both the A4 preview screen and the exported PDF to ensure visual publication quality.
 
----
-
 ## How to Use
 
 ### 1. Launching the Preview
@@ -59,8 +56,6 @@ Click the gear icon (⚙️) on the top right of the preview header to open page
 * **Show file name as title:** Automatically render the filename as the main document header.
 
 ![Page Layout Settings Modal](./assets/2026-06-29_setting.png)
-
----
 
 ## Multilingual Readme
 * [한국어 버전 (Korean Version)](./README.ko.md)
