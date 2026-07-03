@@ -73,7 +73,6 @@
 	max-width: 210mm;
 	padding: 20mm;
 	box-sizing: border-box;
-	visibility: hidden;
 }
 
 .pdf-preview-page {
@@ -166,15 +165,49 @@
 	margin-top: 0;
 	margin-bottom: 0.8em;
 	line-height: 1.6;
+	tab-size: 4 !important;
+	-moz-tab-size: 4 !important;
 }
 .pdf-preview-page ul,
 .pdf-preview-page ol {
 	margin-top: 0;
 	margin-bottom: 0.8em;
-	padding-left: 1.5em;
+	padding-left: 1.5em !important;
+}
+.pdf-preview-page ul {
+	list-style-type: disc !important;
+}
+.pdf-preview-page ol {
+	list-style-type: decimal !important;
+}
+.pdf-preview-page ul ul,
+.pdf-preview-page ul ol,
+.pdf-preview-page ol ul,
+.pdf-preview-page ol ol {
+	margin-top: 0.2em;
+	margin-bottom: 0;
+	padding-left: 2em !important; /* Standard nested list indentation without vertical lines */
+}
+.pdf-preview-page ul ul {
+	list-style-type: circle !important;
+}
+.pdf-preview-page ul ul ul {
+	list-style-type: square !important;
 }
 .pdf-preview-page li {
 	margin-bottom: 0.2em;
+}
+
+/* Indent guide line style for plain indentation (no lists) */
+.pdf-preview-page .pdf-indent-container {
+	border-left: 1px solid var(--background-modifier-border) !important; /* Vertical indent guide line */
+	padding-left: 1.2em !important;
+	margin-left: 0.4em !important;
+	margin-top: 0 !important;
+	margin-bottom: 0 !important;
+	padding-top: 0.15em !important;
+	padding-bottom: 0.15em !important;
+	display: block !important;
 }
 .pdf-preview-page hr {
 	border: none !important;
@@ -184,11 +217,18 @@
 }
 .pdf-preview-page blockquote {
 	border-left: 4px solid var(--background-modifier-border) !important;
-	margin: 1em 0;
-	padding: 0.5em 1em;
+	margin: 1em 0 1em 2em !important; /* Left margin to indent blockquotes */
+	padding: 0.5em 1em !important;
 	color: var(--text-muted) !important;
 	background-color: var(--background-secondary-alt) !important;
 }
+.pdf-preview-page .callout {
+	margin: 1em 0 1em 2em !important; /* Left margin to indent callouts */
+}
+
+
+
+
 .pdf-preview-page table {
 	border-collapse: collapse;
 	width: 100%;
@@ -201,8 +241,27 @@
 }
 .pdf-preview-page th {
 	background-color: var(--background-secondary) !important;
-	font-weight: 600;
 }
+
+/* Ensure Mermaid diagrams fit within the page margins and scale responsively */
+.pdf-preview-page .block-language-mermaid,
+.pdf-preview-page .mermaid {
+	width: 100% !important;
+	max-width: 100% !important;
+	overflow: visible !important;
+	display: flex !important;
+	justify-content: center !important;
+	margin: 1.5em 0 !important;
+	page-break-inside: avoid !important;
+	break-inside: avoid !important;
+}
+
+.pdf-preview-page .block-language-mermaid svg,
+.pdf-preview-page .mermaid svg {
+	max-width: 100% !important;
+	height: auto !important;
+}
+
 
 /* Style continuation list items to hide bullets, numbers, and padding markers */
 body .pdf-preview-page ul > li.pdf-list-split-continuation,

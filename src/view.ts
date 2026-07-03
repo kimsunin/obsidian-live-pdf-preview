@@ -31,6 +31,10 @@ export class PdfPreviewView extends ItemView {
 	public showTitle = true;
 	private showPageNumbers = false;
 	private resizeObserver: ResizeObserver | null = null;
+	private lastScrollTop = 0;
+	private lastScrollHeight = 0;
+	private lastClientHeight = 0;
+	private isResizing = false;
 
 	private debouncedRender = debounce(() => {
 		void this.renderPartial();
@@ -100,6 +104,25 @@ export class PdfPreviewView extends ItemView {
 		this.activeContainer = this.containerA;
 		this.inactiveContainer = this.containerB;
 
+		// Track scroll position for both containers to prevent resize scroll drift
+		const handleScroll = (container: HTMLDivElement) => {
+			if (this.isResizing) return; // Ignore scroll events triggered by resize transitions
+			this.lastScrollTop = container.scrollTop;
+			this.lastScrollHeight = container.scrollHeight;
+			this.lastClientHeight = container.clientHeight;
+		};
+
+		this.containerA.addEventListener('scroll', () => {
+			if (this.activeContainer === this.containerA) {
+				handleScroll(this.containerA);
+			}
+		});
+		this.containerB.addEventListener('scroll', () => {
+			if (this.activeContainer === this.containerB) {
+				handleScroll(this.containerB);
+			}
+		});
+
 		// Create the master render container (hidden offscreen)
 		this.masterContainer = container.createEl('div', {
 			cls: 'pdf-preview-master',
@@ -112,6 +135,8 @@ export class PdfPreviewView extends ItemView {
 		// Apply initial values
 		this.updateLayoutSettings();
 
+		this.addChild(this.upperComponent);
+		this.addChild(this.lowerComponent);
 		this.upperComponent.load();
 		this.lowerComponent.load();
 
@@ -132,14 +157,28 @@ export class PdfPreviewView extends ItemView {
 			})
 		);
 
-		// Add a ResizeObserver to trigger postProcess when the view is attached and sized
-		this.resizeObserver = new ResizeObserver(
-			debounce(() => {
-				if (this.activeContainer && this.activeContainer.offsetHeight > 0) {
-					this.postProcess(this.activeContainer);
+		// Non-debounced ResizeObserver sets isResizing to true immediately,
+		// then debounces the scroll adjustment to stop rendering feedback loops.
+		let resizeTimeout: number | null = null;
+		this.resizeObserver = new ResizeObserver(() => {
+			this.isResizing = true;
+			if (resizeTimeout) {
+				window.clearTimeout(resizeTimeout);
+			}
+
+			// Proportionally adjust scroll position during resize
+			this.adjustScrollOnResize();
+
+			// End resizing status 150ms after resizing ends
+			resizeTimeout = window.setTimeout(() => {
+				this.isResizing = false;
+				if (this.activeContainer) {
+					this.lastScrollTop = this.activeContainer.scrollTop;
+					this.lastScrollHeight = this.activeContainer.scrollHeight;
+					this.lastClientHeight = this.activeContainer.clientHeight;
 				}
-			}, 100)
-		);
+			}, 150);
+		});
 		this.resizeObserver.observe(this.containerA);
 		this.resizeObserver.observe(this.containerB);
 
@@ -148,10 +187,38 @@ export class PdfPreviewView extends ItemView {
 		this.onFileOpen(activeFile);
 	}
 
+	private adjustScrollOnResize() {
+		if (!this.activeContainer) return;
+		const container = this.activeContainer;
+		const curScrollHeight = container.scrollHeight;
+		const curClientHeight = container.clientHeight;
+
+		const wrappers = container.querySelectorAll('.pdf-page-wrapper');
+		if (wrappers.length === 0) {
+			this.postProcess(container);
+			this.lastScrollHeight = container.scrollHeight;
+			this.lastClientHeight = container.clientHeight;
+			this.lastScrollTop = container.scrollTop;
+			return;
+		}
+
+		// Adjust the scrollTop value using our cached stable coordinates
+		if (this.lastScrollHeight > 0 && this.lastScrollHeight !== curScrollHeight) {
+			const maxScrollOld = this.lastScrollHeight - this.lastClientHeight;
+			if (maxScrollOld > 0) {
+				const scrollRatio = this.lastScrollTop / maxScrollOld;
+				const maxScrollNew = curScrollHeight - curClientHeight;
+				container.scrollTop = scrollRatio * maxScrollNew;
+			}
+		}
+	}
+
 	async onClose() {
 		this.debouncedRender.cancel();
 		this.upperComponent.unload();
 		this.lowerComponent.unload();
+		this.removeChild(this.upperComponent);
+		this.removeChild(this.lowerComponent);
 		if (this.resizeObserver) {
 			this.resizeObserver.disconnect();
 			this.resizeObserver = null;
@@ -220,6 +287,11 @@ export class PdfPreviewView extends ItemView {
 
 		// Clean up memory and cloned nodes in the old active container
 		this.inactiveContainer.empty();
+
+		// Update the scroll dimension cache for the newly active container
+		this.lastScrollTop = savedScrollTop;
+		this.lastScrollHeight = this.activeContainer.scrollHeight;
+		this.lastClientHeight = this.activeContainer.clientHeight;
 	}
 
 	private scrollToActiveSection() {
@@ -320,15 +392,22 @@ export class PdfPreviewView extends ItemView {
 			text = `# ${this.currentFile.basename}\n\n` + text;
 		}
 
+		// Apply custom indentation guide lines (Phase 8)
+		text = this.processMarkdownIndentation(text);
+
 		this.upperEl.empty();
 		this.lowerEl.empty();
 		this.cachedUpperText = '';
 
 		this.lowerComponent.unload();
+		this.removeChild(this.lowerComponent);
 		this.lowerComponent = new Component();
+		this.addChild(this.lowerComponent);
 		this.lowerComponent.load();
 
 		await MarkdownRenderer.render(this.app, text, this.lowerEl, sourcePath, this.lowerComponent);
+
+
 
 		this.postProcess(this.inactiveContainer);
 		this.swapContainers(savedScrollTop);
@@ -374,9 +453,12 @@ export class PdfPreviewView extends ItemView {
 			cursorLine = cursorLine + 2;
 		}
 
+		// Preprocess indentation on the entire text first to keep code block tracking accurate
+		const processedText = this.processMarkdownIndentation(text);
+
 		// Find safe block boundary above cursor
-		const cutLine = this.findCutLine(text, cursorLine);
-		const lines = text.split('\n');
+		const cutLine = this.findCutLine(processedText, cursorLine);
+		const lines = processedText.split('\n');
 		const upperText = lines.slice(0, cutLine).join('\n');
 		const lowerText = lines.slice(cutLine).join('\n');
 
@@ -384,7 +466,9 @@ export class PdfPreviewView extends ItemView {
 			// Upper unchanged → only re-render the lower section
 			this.lowerEl.empty();
 			this.lowerComponent.unload();
+			this.removeChild(this.lowerComponent);
 			this.lowerComponent = new Component();
+			this.addChild(this.lowerComponent);
 			this.lowerComponent.load();
 
 			if (lowerText) {
@@ -396,10 +480,14 @@ export class PdfPreviewView extends ItemView {
 			this.lowerEl.empty();
 
 			this.upperComponent.unload();
+			this.removeChild(this.upperComponent);
 			this.upperComponent = new Component();
+			this.addChild(this.upperComponent);
 			this.upperComponent.load();
 			this.lowerComponent.unload();
+			this.removeChild(this.lowerComponent);
 			this.lowerComponent = new Component();
+			this.addChild(this.lowerComponent);
 			this.lowerComponent.load();
 
 			if (upperText) {
@@ -412,9 +500,87 @@ export class PdfPreviewView extends ItemView {
 			this.cachedUpperText = upperText;
 		}
 
+
+
 		this.postProcess(this.inactiveContainer);
 		this.swapContainers(savedScrollTop);
 		this.scrollToActiveSection();
+	}
+
+
+
+	/**
+	 * Preprocesses the markdown text to wrap plain indentation blocks (tabs or 4-spaces
+	 * that are not part of code blocks or lists) in nested <div class="pdf-indent-container">
+	 * wrappers. This creates vertical guide lines (|) for each level of plain indentation,
+	 * exactly like the Obsidian editor, without turning them into pre/code blocks.
+	 */
+	private processMarkdownIndentation(text: string): string {
+		const lines = text.split('\n');
+		let inCodeBlock = false;
+		let inFrontmatter = false;
+		
+		if (lines.length > 0 && lines[0] !== undefined && lines[0].trim() === '---') {
+			inFrontmatter = true;
+		}
+
+		const processedLines = lines.map((line, index) => {
+			if (index > 0 && line.trim() === '---') {
+				if (inFrontmatter) {
+					inFrontmatter = false;
+					return line;
+				}
+			}
+			if (inFrontmatter) {
+				return line;
+			}
+
+			if (line.trim().startsWith('```') || line.trim().startsWith('~~~')) {
+				inCodeBlock = !inCodeBlock;
+				return line;
+			}
+			if (inCodeBlock) {
+				return line;
+			}
+
+			if (line.trim() === '') {
+				return line;
+			}
+
+			let indentLevel = 0;
+			let tempLine = line;
+			while (true) {
+				if (tempLine.startsWith('\t')) {
+					indentLevel++;
+					tempLine = tempLine.substring(1);
+				} else if (tempLine.startsWith('    ')) {
+					indentLevel++;
+					tempLine = tempLine.substring(4);
+				} else {
+					break;
+				}
+			}
+
+			if (indentLevel === 0) {
+				return line;
+			}
+
+			const trimmedTemp = tempLine.trim();
+			// Match lists: bullets (-, *, +) or numbered lists (1., 2., etc.)
+			const isList = /^(?:[-*+]|\d+\.)\s/.test(trimmedTemp);
+
+			if (isList) {
+				return line;
+			}
+
+			let wrappedLine = tempLine;
+			for (let i = 0; i < indentLevel; i++) {
+				wrappedLine = `<div class="pdf-indent-container">${wrappedLine}</div>`;
+			}
+			return wrappedLine;
+		});
+
+		return processedLines.join('\n');
 	}
 
 	/**
