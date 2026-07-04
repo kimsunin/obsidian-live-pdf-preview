@@ -244,7 +244,7 @@ export class PdfPreviewView extends ItemView {
 		if (file === this.currentFile) return;
 		this.currentFile = file;
 		this.cachedUpperText = '';
-		void this.renderFull();
+		void this.renderFull(true);
 	}
 
 	// --- Rendering ---
@@ -369,7 +369,7 @@ export class PdfPreviewView extends ItemView {
 		return { text: lines.join('\n'), cursorLine: adjustedCursor };
 	}
 
-	public async renderFull() {
+	public async renderFull(resetScroll = false) {
 		if (!this.currentFile) {
 			this.restoreFromPages();
 			this.upperEl.empty();
@@ -377,7 +377,13 @@ export class PdfPreviewView extends ItemView {
 			return;
 		}
 
-		const savedScrollTop = this.activeContainer ? this.activeContainer.scrollTop : 0;
+		if (resetScroll) {
+			this.lastScrollTop = 0;
+			this.lastScrollHeight = 0;
+			this.lastClientHeight = 0;
+		}
+
+		const savedScrollTop = resetScroll ? 0 : (this.activeContainer ? this.activeContainer.scrollTop : 0);
 
 		this.restoreFromPages();
 		
