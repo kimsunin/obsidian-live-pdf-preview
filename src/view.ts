@@ -597,7 +597,7 @@ export class PdfPreviewView extends ItemView {
 			const line = lines[i];
 			if (line !== undefined) {
 				const trimmed = line.trim();
-				if (trimmed === '//column' || /^\/\/column-\d+$/.test(trimmed)) {
+				if (trimmed === '//column' || trimmed === '//center' || /^\/\/column-\d+$/.test(trimmed)) {
 					// Ensure there is an empty line before (if i > 0 and not empty)
 					if (i > 0 && lines[i - 1]?.trim() !== '') {
 						lines.splice(i, 0, '');
@@ -635,8 +635,8 @@ export class PdfPreviewView extends ItemView {
 				const prevLineContent = editor.getLine(lineNum - 1);
 				const prevTrimmed = prevLineContent.trim();
 				
-				// Match either '//column' or '//column-N' (where N is a digit)
-				if (prevTrimmed === '//column' || /^\/\/column-\d+$/.test(prevTrimmed)) {
+				// Match '//column', '//center', or '//column-N' (where N is a digit)
+				if (prevTrimmed === '//column' || prevTrimmed === '//center' || /^\/\/column-\d+$/.test(prevTrimmed)) {
 					const currentLineContent = editor.getLine(lineNum);
 					if (currentLineContent.trim() === '') {
 						// Count occurrences in the entire document to see if a closing tag already exists
@@ -662,7 +662,7 @@ export class PdfPreviewView extends ItemView {
 				}
 			}
 		} catch (e) {
-			console.error('Column autocomplete failed:', e);
+			console.error('Column/Center autocomplete failed:', e);
 		} finally {
 			this.isAutocompleting = false;
 		}
@@ -679,6 +679,17 @@ export class PdfPreviewView extends ItemView {
 		return inColumn;
 	}
 
+	private isInsideCenterBlock(lines: string[], targetLineIndex: number): boolean {
+		let inCenter = false;
+		for (let i = 0; i <= targetLineIndex; i++) {
+			const line = lines[i];
+			if (line !== undefined && line.trim() === '//center') {
+				inCenter = !inCenter;
+			}
+		}
+		return inCenter;
+	}
+
 	/**
 	 * Searches upward from the cursor line to find the nearest blank line,
 	 * which marks a safe markdown block boundary for splitting.
@@ -690,7 +701,7 @@ export class PdfPreviewView extends ItemView {
 		for (let i = start; i >= 0; i--) {
 			const line = lines[i];
 			if (line !== undefined && line.trim() === '') {
-				if (!this.isInsideColumnBlock(lines, i)) {
+				if (!this.isInsideColumnBlock(lines, i) && !this.isInsideCenterBlock(lines, i)) {
 					return i + 1;
 				}
 			}
@@ -780,10 +791,60 @@ export class PdfPreviewView extends ItemView {
 		}
 	}
 
+	private groupCenterBlocks(container: HTMLElement) {
+		let children = Array.from(container.children) as HTMLElement[];
+		let i = 0;
+		while (i < children.length) {
+			const child = children[i];
+			if (!child) {
+				i++;
+				continue;
+			}
+			if (child.textContent?.trim() === '//center') {
+				let closeIndex = -1;
+				for (let j = i + 1; j < children.length; j++) {
+					const nextEl = children[j];
+					if (nextEl && nextEl.textContent?.trim() === '//center') {
+						closeIndex = j;
+						break;
+					}
+				}
+
+				if (closeIndex !== -1) {
+					const centerEl = document.createElement('div');
+					centerEl.className = 'pdf-center-block';
+
+					const contentElements = children.slice(i + 1, closeIndex);
+					for (const el of contentElements) {
+						if (el) centerEl.appendChild(el);
+					}
+
+					const insertBeforeEl: HTMLElement | null = (closeIndex + 1 < children.length) ? (children[closeIndex + 1] ?? null) : null;
+					for (let k = i; k <= closeIndex; k++) {
+						const markerEl = children[k];
+						if (markerEl && markerEl.parentNode === container) {
+							container.removeChild(markerEl);
+						}
+					}
+
+					container.insertBefore(centerEl, insertBeforeEl);
+
+					// Refresh the children array and restart/adjust the index
+					children = Array.from(container.children) as HTMLElement[];
+					i = children.indexOf(centerEl) + 1;
+					continue;
+				}
+			}
+			i++;
+		}
+	}
+
 	private postProcess(targetContainer: HTMLDivElement = this.activeContainer) {
 		if (!this.upperEl || !this.lowerEl) return;
 		this.groupColumns(this.upperEl);
 		this.groupColumns(this.lowerEl);
+		this.groupCenterBlocks(this.upperEl);
+		this.groupCenterBlocks(this.lowerEl);
 		applyPageBreaks(this.upperEl, this.lowerEl);
 		applyVirtualPagination({
 			previewContainer: targetContainer,

@@ -125,7 +125,16 @@ function getTextNodeAndOffset(parent: Node, targetOffset: number): { node: Text;
  * Returns the overflow portion as a new element, or null if splitting isn't possible.
  */
 export function splitElementAtOverflow(el: HTMLElement, maxContentBottom: number): HTMLElement | null {
-	if (!['P', 'LI', 'BLOCKQUOTE', 'PRE'].includes(el.tagName)) {
+	// Avoid splitting structured containers or media elements character-by-character
+	if ([
+		'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD',
+		'UL', 'OL',
+		'IMG', 'HR', 'IFRAME', 'VIDEO', 'AUDIO', 'SVG', 'CANVAS'
+	].includes(el.tagName) || 
+		el.classList.contains('pdf-row') || 
+		el.classList.contains('pdf-col') || 
+		el.classList.contains('pdf-center-block')
+	) {
 		return null;
 	}
 
@@ -138,7 +147,12 @@ export function splitElementAtOverflow(el: HTMLElement, maxContentBottom: number
 	const pageEl = el.closest('.pdf-preview-page') as HTMLElement | null;
 	const getBottom = () => {
 		if (pageEl) {
-			return getElementOffsetTopRelativeTo(el, pageEl) + el.offsetHeight;
+			const rect = el.getBoundingClientRect();
+			const pageRect = pageEl.getBoundingClientRect();
+			const scaleFactor = pageEl.offsetWidth > 0 ? (pageRect.width / pageEl.offsetWidth) : 1;
+			if (scaleFactor > 0) {
+				return (rect.bottom - pageRect.top) / scaleFactor;
+			}
 		}
 		return el.offsetTop + el.offsetHeight;
 	};
@@ -352,6 +366,14 @@ export function applyVirtualPagination(config: PaginationConfig) {
 						continue;
 					}
 
+					// Handle nested tables inside columns to split them row-by-row
+					if (htmlChild.tagName === 'TABLE') {
+						const hasOverflowedRef: { value: boolean } = { value: hasOverflowed };
+						splitTableInsideContainer(htmlChild, currentColEl, nextColElements[colIdx], currentPage, maxContentBottom, hasOverflowedRef);
+						hasOverflowed = hasOverflowedRef.value;
+						continue;
+					}
+
 					// Handle nested lists (UL/OL) inside columns to split them item-by-item
 					if (htmlChild.tagName === 'UL' || htmlChild.tagName === 'OL') {
 						const listType = htmlChild.tagName.toLowerCase();
@@ -477,6 +499,280 @@ export function applyVirtualPagination(config: PaginationConfig) {
 				// Insert the nextRowEl into the elements array for processing on the next iteration
 				const currentIndex = allElements.indexOf(el);
 				allElements.splice(currentIndex + 1, 0, nextRowEl);
+			}
+
+			el.remove();
+			elementIndex++;
+			continue;
+		}
+
+		// If it is a center alignment container (pdf-center-block) — try to fit or split its children
+		if (el.classList.contains('pdf-center-block')) {
+			currentPage.appendChild(el);
+			const centerBottom = el.offsetTop + el.offsetHeight;
+			const centerStyle = window.getComputedStyle(el);
+			const centerMarginBottom = parseFloat(centerStyle.marginBottom) || 0;
+
+			if (centerBottom + centerMarginBottom <= maxContentBottom) {
+				elementIndex++;
+				continue;
+			}
+
+			// The entire center block does NOT fit — split it item-by-item
+			currentPage.removeChild(el);
+
+			const centerChildren = Array.from(el.children) as HTMLElement[];
+			const sectionAttr = el.getAttribute('data-section') || '';
+
+			// Create the center container on the current page
+			const currentCenterEl = currentPage.createEl('div');
+			currentCenterEl.className = el.className;
+			currentCenterEl.style.cssText = el.style.cssText;
+			currentCenterEl.setAttribute('data-section', sectionAttr);
+
+			const nextCenterElements: HTMLElement[] = [];
+			let hasOverflowed = false;
+
+			for (const child of centerChildren) {
+				const htmlChild = child as HTMLElement;
+
+				// Check if this is a center-local page break (//page)
+				if (htmlChild.classList.contains('pdf-page-break')) {
+					htmlChild.remove();
+					hasOverflowed = true;
+					continue;
+				}
+
+				// Handle nested tables inside center block to split them row-by-row
+				if (htmlChild.tagName === 'TABLE') {
+					const hasOverflowedRef: { value: boolean } = { value: hasOverflowed };
+					splitTableInsideContainer(htmlChild, currentCenterEl, nextCenterElements, currentPage, maxContentBottom, hasOverflowedRef);
+					hasOverflowed = hasOverflowedRef.value;
+					continue;
+				}
+
+				// Handle nested lists (UL/OL) inside center block to split them item-by-item
+				if (htmlChild.tagName === 'UL' || htmlChild.tagName === 'OL') {
+					const listType = htmlChild.tagName.toLowerCase();
+					const listItems = Array.from(htmlChild.children) as HTMLElement[];
+					const listSectionAttr = htmlChild.getAttribute('data-section') || '';
+
+					let currentListContainer = currentCenterEl.createEl(listType as keyof HTMLElementTagNameMap);
+					currentListContainer.className = htmlChild.className;
+					currentListContainer.style.cssText = htmlChild.style.cssText;
+					currentListContainer.setAttribute('data-section', listSectionAttr);
+
+					let itemIndex = 1;
+
+					for (const li of listItems) {
+						const htmlLi = li as HTMLElement;
+						if (hasOverflowed) {
+							const nextListContainer = getOrCreateNextListContainer(nextCenterElements, listType, htmlChild, listSectionAttr);
+							nextListContainer.appendChild(htmlLi);
+							continue;
+						}
+
+						currentListContainer.appendChild(htmlLi);
+
+						const childRect = htmlLi.getBoundingClientRect();
+						const pageRect = currentPage.getBoundingClientRect();
+						const scaleFactor = currentPage.offsetWidth > 0 ? (pageRect.width / currentPage.offsetWidth) : 1;
+						const totalBottom = scaleFactor > 0 ? (childRect.bottom - pageRect.top) / scaleFactor : (childRect.bottom - pageRect.top);
+
+						const isFirstEl = (currentListContainer.children.length === 1 && currentCenterEl.children.length === 1 && currentPage.children.length <= 1);
+
+						if (!isFirstEl && totalBottom > maxContentBottom) {
+							const nextLi = splitElementAtOverflow(htmlLi, maxContentBottom);
+							if (nextLi) {
+								nextLi.classList.add('pdf-list-split-continuation');
+								const nextListContainer = getOrCreateNextListContainer(nextCenterElements, listType, htmlChild, listSectionAttr);
+								if (listType === 'ol') {
+									nextListContainer.setAttribute('start', String(itemIndex));
+								}
+								nextListContainer.appendChild(nextLi as HTMLElement);
+							} else {
+								currentListContainer.removeChild(htmlLi);
+								const nextListContainer = getOrCreateNextListContainer(nextCenterElements, listType, htmlChild, listSectionAttr);
+								if (listType === 'ol') {
+									nextListContainer.setAttribute('start', String(itemIndex));
+								}
+								nextListContainer.appendChild(htmlLi);
+							}
+							hasOverflowed = true;
+						}
+						itemIndex++;
+					}
+
+					if (currentListContainer.children.length === 0) {
+						currentListContainer.remove();
+					}
+
+					continue;
+				}
+
+				// General block elements inside center block
+				if (hasOverflowed) {
+					nextCenterElements.push(htmlChild);
+					continue;
+				}
+
+				currentCenterEl.appendChild(htmlChild);
+
+				// Measure height
+				const childRect = htmlChild.getBoundingClientRect();
+				const pageRect = currentPage.getBoundingClientRect();
+				const scaleFactor = currentPage.offsetWidth > 0 ? (pageRect.width / currentPage.offsetWidth) : 1;
+				const totalBottom = scaleFactor > 0 ? (childRect.bottom - pageRect.top) / scaleFactor : (childRect.bottom - pageRect.top);
+
+				const isFirstEl = (currentCenterEl.children.length === 1 && currentPage.children.length <= 1);
+
+				if (!isFirstEl && totalBottom > maxContentBottom) {
+					const nextChild = splitElementAtOverflow(htmlChild, maxContentBottom);
+					if (nextChild) {
+						nextCenterElements.push(nextChild as HTMLElement);
+					} else {
+						currentCenterEl.removeChild(htmlChild);
+						nextCenterElements.push(htmlChild);
+					}
+					hasOverflowed = true;
+				}
+			}
+
+			// If current center container is empty, remove it
+			if (currentCenterEl.children.length === 0) {
+				currentCenterEl.remove();
+			}
+
+			// If some elements overflowed, create nextCenterEl and splice it
+			if (nextCenterElements.length > 0) {
+				currentPage = createPageElement(previewContainer);
+
+				const nextCenterEl = document.createElement('div');
+				nextCenterEl.className = el.className;
+				nextCenterEl.style.cssText = el.style.cssText;
+				nextCenterEl.setAttribute('data-section', sectionAttr);
+
+				nextCenterElements.forEach(child => {
+					nextCenterEl.appendChild(child);
+				});
+
+				const currentIndex = allElements.indexOf(el);
+				allElements.splice(currentIndex + 1, 0, nextCenterEl);
+			}
+
+			el.remove();
+			elementIndex++;
+			continue;
+		}
+
+		// If it's a TABLE — try to fit or split row-by-row
+		if (el.tagName === 'TABLE') {
+			currentPage.appendChild(el);
+			const tableBottom = el.offsetTop + el.offsetHeight;
+			const tableStyle = window.getComputedStyle(el);
+			const tableMarginBottom = parseFloat(tableStyle.marginBottom) || 0;
+
+			if (tableBottom + tableMarginBottom <= maxContentBottom) {
+				elementIndex++;
+				continue;
+			}
+
+			// The entire table does NOT fit — split it row-by-row
+			currentPage.removeChild(el);
+
+			const sectionAttr = el.getAttribute('data-section') || '';
+
+			// Parse header rows and body rows
+			const thead = el.querySelector('thead');
+			const tbody = el.querySelector('tbody');
+			const allRows = Array.from(el.querySelectorAll('tr')) as HTMLTableRowElement[];
+
+			let headerRows: HTMLTableRowElement[] = [];
+			let bodyRows: HTMLTableRowElement[] = [];
+
+			if (thead) {
+				headerRows = Array.from(thead.querySelectorAll('tr'));
+			}
+			if (tbody) {
+				bodyRows = Array.from(tbody.querySelectorAll('tr'));
+			} else {
+				// If no thead/tbody, treat the first row as header if it has th elements
+				if (allRows.length > 0) {
+					const firstRowHasTh = allRows[0]?.querySelector('th') !== null;
+					if (firstRowHasTh) {
+						headerRows = [allRows[0] as HTMLTableRowElement];
+						bodyRows = allRows.slice(1);
+					} else {
+						bodyRows = allRows;
+					}
+				}
+			}
+
+			// Create table container on current page
+			const currentTable = currentPage.createEl('table');
+			currentTable.className = el.className;
+			currentTable.style.cssText = el.style.cssText;
+			currentTable.setAttribute('data-section', sectionAttr);
+
+			// Append headers to currentTable
+			let currentThead = currentTable.createEl('thead');
+			headerRows.forEach(row => {
+				currentThead.appendChild(row.cloneNode(true));
+			});
+
+			let currentTbody = currentTable.createEl('tbody');
+			const nextBodyRows: HTMLTableRowElement[] = [];
+			let hasOverflowed = false;
+
+			for (const row of bodyRows) {
+				if (hasOverflowed) {
+					nextBodyRows.push(row);
+					continue;
+				}
+
+				currentTbody.appendChild(row);
+
+				const childRect = row.getBoundingClientRect();
+				const pageRect = currentPage.getBoundingClientRect();
+				const scaleFactor = currentPage.offsetWidth > 0 ? (pageRect.width / currentPage.offsetWidth) : 1;
+				const totalBottom = scaleFactor > 0 ? (childRect.bottom - pageRect.top) / scaleFactor : (childRect.bottom - pageRect.top);
+
+				const isFirstEl = (currentTbody.children.length === 1 && currentPage.children.length <= 1);
+
+				if (!isFirstEl && totalBottom > maxContentBottom) {
+					currentTbody.removeChild(row);
+					nextBodyRows.push(row);
+					hasOverflowed = true;
+				}
+			}
+
+			// Clean up if empty
+			if (currentTbody.children.length === 0) {
+				currentTable.remove();
+			}
+
+			// If rows overflowed, create nextTable on next page
+			if (nextBodyRows.length > 0) {
+				currentPage = createPageElement(previewContainer);
+
+				const nextTable = document.createElement('table');
+				nextTable.className = el.className;
+				nextTable.style.cssText = el.style.cssText;
+				nextTable.setAttribute('data-section', sectionAttr);
+
+				// Repeat headers on next page!
+				let nextThead = nextTable.createEl('thead');
+				headerRows.forEach(row => {
+					nextThead.appendChild(row.cloneNode(true));
+				});
+
+				let nextTbody = nextTable.createEl('tbody');
+				nextBodyRows.forEach(row => {
+					nextTbody.appendChild(row);
+				});
+
+				const currentIndex = allElements.indexOf(el);
+				allElements.splice(currentIndex + 1, 0, nextTable);
 			}
 
 			el.remove();
@@ -626,4 +922,109 @@ function getOrCreateNextListContainer(overflowList: HTMLElement[] | undefined, l
 	nextListContainer.setAttribute('data-section', sectionAttr);
 	overflowList.push(nextListContainer);
 	return nextListContainer;
+}
+
+function splitTableInsideContainer(
+	table: HTMLElement,
+	currentParentEl: HTMLElement,
+	overflowList: HTMLElement[] | undefined,
+	currentPage: HTMLElement,
+	maxContentBottom: number,
+	hasOverflowedRef: { value: boolean }
+): void {
+	const sectionAttr = table.getAttribute('data-section') || '';
+	const thead = table.querySelector('thead');
+	const tbody = table.querySelector('tbody');
+	const allRows = Array.from(table.querySelectorAll('tr')) as HTMLTableRowElement[];
+
+	let headerRows: HTMLTableRowElement[] = [];
+	let bodyRows: HTMLTableRowElement[] = [];
+
+	if (thead) {
+		headerRows = Array.from(thead.querySelectorAll('tr'));
+	}
+	if (tbody) {
+		bodyRows = Array.from(tbody.querySelectorAll('tr'));
+	} else {
+		if (allRows.length > 0) {
+			const firstRowHasTh = allRows[0]?.querySelector('th') !== null;
+			if (firstRowHasTh) {
+				headerRows = [allRows[0] as HTMLTableRowElement];
+				bodyRows = allRows.slice(1);
+			} else {
+				bodyRows = allRows;
+			}
+		}
+	}
+
+	const currentTable = currentParentEl.createEl('table');
+	currentTable.className = table.className;
+	currentTable.style.cssText = table.style.cssText;
+	currentTable.setAttribute('data-section', sectionAttr);
+
+	let currentThead = currentTable.createEl('thead');
+	headerRows.forEach(row => {
+		currentThead.appendChild(row.cloneNode(true));
+	});
+
+	let currentTbody = currentTable.createEl('tbody');
+	const nextBodyRows: HTMLTableRowElement[] = [];
+
+	for (const row of bodyRows) {
+		if (hasOverflowedRef.value) {
+			const nextTable = getOrCreateNextTableContainer(overflowList, table, headerRows, sectionAttr);
+			const nextTbody = nextTable.querySelector('tbody') || nextTable.createEl('tbody');
+			nextTbody.appendChild(row);
+			continue;
+		}
+
+		currentTbody.appendChild(row);
+
+		const childRect = row.getBoundingClientRect();
+		const pageRect = currentPage.getBoundingClientRect();
+		const scaleFactor = currentPage.offsetWidth > 0 ? (pageRect.width / currentPage.offsetWidth) : 1;
+		const totalBottom = scaleFactor > 0 ? (childRect.bottom - pageRect.top) / scaleFactor : (childRect.bottom - pageRect.top);
+
+		const isFirstEl = (currentTbody.children.length === 1 && currentParentEl.children.length === 1 && currentPage.children.length <= 1);
+
+		if (!isFirstEl && totalBottom > maxContentBottom) {
+			currentTbody.removeChild(row);
+			const nextTable = getOrCreateNextTableContainer(overflowList, table, headerRows, sectionAttr);
+			const nextTbody = nextTable.querySelector('tbody') || nextTable.createEl('tbody');
+			nextTbody.appendChild(row);
+			hasOverflowedRef.value = true;
+		}
+	}
+
+	if (currentTbody.children.length === 0) {
+		currentTable.remove();
+	}
+}
+
+function getOrCreateNextTableContainer(
+	overflowList: HTMLElement[] | undefined,
+	originalTable: HTMLElement,
+	headerRows: HTMLTableRowElement[],
+	sectionAttr: string
+): HTMLElement {
+	if (!overflowList) {
+		return document.createElement('table');
+	}
+	const lastEl = overflowList.length > 0 ? overflowList[overflowList.length - 1] : null;
+	if (lastEl && lastEl.tagName.toLowerCase() === 'table') {
+		return lastEl;
+	}
+	const nextTable = document.createElement('table') as HTMLElement;
+	nextTable.className = originalTable.className;
+	nextTable.style.cssText = originalTable.style.cssText;
+	nextTable.setAttribute('data-section', sectionAttr);
+
+	// Repeat headers
+	const nextThead = nextTable.createEl('thead');
+	headerRows.forEach(row => {
+		nextThead.appendChild(row.cloneNode(true));
+	});
+
+	overflowList.push(nextTable);
+	return nextTable;
 }

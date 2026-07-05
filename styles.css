@@ -476,3 +476,28 @@ li.pdf-list-split-continuation::after {
 	object-fit: contain !important;
 }
 
+/* Center alignment support (//center) */
+.pdf-center-block {
+	text-align: center !important;
+}
+
+.pdf-center-block * {
+	text-align: center;
+}
+
+.pdf-center-block img {
+	display: block;
+	margin-left: auto !important;
+	margin-right: auto !important;
+}
+
+.pdf-center-block table {
+	margin-left: auto !important;
+	margin-right: auto !important;
+}
+
+.pdf-center-block ul, .pdf-center-block ol {
+	display: inline-block;
+	text-align: left;
+}
+
