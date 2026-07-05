@@ -39,7 +39,18 @@ It streamlines your writing workflow by combining document editing and publicati
 
 ![Paging Screenshot](./assets/2026-06-30_paging.png)
 
-### 5. One-Click PDF Export with Outlines
+### 5. Multi-Column Layout (1 to 3 Columns)
+
+- Wrap sections in **`//column`** tags to arrange content side-by-side.
+- Define columns using **`//column-1`**, **`//column-2`**, or **`//column-3`** (supports up to 3 columns).
+- **Smart Autocomplete:** Typing a column marker and hitting `Enter` automatically appends the corresponding closing tag for you, preventing broken layout structure.
+- **Independent Page Flow & Splitting:**
+  - If a column contains long paragraphs or lists that exceed the page height limit, they will split cleanly **line-by-line or item-by-item** to the next page, while the other columns remain unaffected.
+  - Numbered lists (`<ol>`) split across pages preserve their continuous indexing.
+- **Local Page Breaks:** Typing **`//page`** inside a specific column will force the subsequent content of *only that column* to flow to the next page, keeping the adjacent columns intact.
+![Multi Column Layout](./assets/2026-06-30_multi_layout.png)
+
+### 6. One-Click PDF Export with Outlines
 
 - Click the 🖨️ (printer icon) on the top right of the preview header to save your document as a PDF.
 - Document headings (`# H1` to `###### H6`) are automatically converted into **interactive PDF outlines (bookmarks)**, allowing readers to jump between sections in any PDF viewer.

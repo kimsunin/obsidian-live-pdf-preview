@@ -35,6 +35,7 @@ export class PdfPreviewView extends ItemView {
 	private lastScrollHeight = 0;
 	private lastClientHeight = 0;
 	private isResizing = false;
+	private isAutocompleting = false;
 
 	private debouncedRender = debounce(() => {
 		void this.renderPartial();
@@ -146,6 +147,7 @@ export class PdfPreviewView extends ItemView {
 				// Only re-render if the change belongs to the active file being previewed
 				if (info.file === this.currentFile) {
 					this.debouncedRender();
+					this.handleColumnAutocomplete(editor);
 				}
 			})
 		);
@@ -411,7 +413,7 @@ export class PdfPreviewView extends ItemView {
 		this.addChild(this.lowerComponent);
 		this.lowerComponent.load();
 
-		await MarkdownRenderer.render(this.app, text, this.lowerEl, sourcePath, this.lowerComponent);
+		await MarkdownRenderer.render(this.app, this.fixColumnLines(text), this.lowerEl, sourcePath, this.lowerComponent);
 
 
 
@@ -478,7 +480,7 @@ export class PdfPreviewView extends ItemView {
 			this.lowerComponent.load();
 
 			if (lowerText) {
-				await MarkdownRenderer.render(this.app, lowerText, this.lowerEl, sourcePath, this.lowerComponent);
+				await MarkdownRenderer.render(this.app, this.fixColumnLines(lowerText), this.lowerEl, sourcePath, this.lowerComponent);
 			}
 		} else {
 			// Upper changed → full re-render with new split
@@ -497,10 +499,10 @@ export class PdfPreviewView extends ItemView {
 			this.lowerComponent.load();
 
 			if (upperText) {
-				await MarkdownRenderer.render(this.app, upperText, this.upperEl, sourcePath, this.upperComponent);
+				await MarkdownRenderer.render(this.app, this.fixColumnLines(upperText), this.upperEl, sourcePath, this.upperComponent);
 			}
 			if (lowerText) {
-				await MarkdownRenderer.render(this.app, lowerText, this.lowerEl, sourcePath, this.lowerComponent);
+				await MarkdownRenderer.render(this.app, this.fixColumnLines(lowerText), this.lowerEl, sourcePath, this.lowerComponent);
 			}
 
 			this.cachedUpperText = upperText;
@@ -589,6 +591,94 @@ export class PdfPreviewView extends ItemView {
 		return processedLines.join('\n');
 	}
 
+	private fixColumnLines(text: string): string {
+		const lines = text.split('\n');
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i];
+			if (line !== undefined) {
+				const trimmed = line.trim();
+				if (trimmed === '//column' || /^\/\/column-\d+$/.test(trimmed)) {
+					// Ensure there is an empty line before (if i > 0 and not empty)
+					if (i > 0 && lines[i - 1]?.trim() !== '') {
+						lines.splice(i, 0, '');
+						i++;
+					}
+					// Ensure there is an empty line after (if not last and not empty)
+					if (i < lines.length - 1 && lines[i + 1]?.trim() !== '') {
+						lines.splice(i + 1, 0, '');
+					}
+				}
+			}
+		}
+		return lines.join('\n');
+	}
+
+	private getOccurrenceCount(editor: any, targetText: string, limitLine: number): number {
+		let count = 0;
+		for (let i = 0; i <= limitLine; i++) {
+			const line = editor.getLine(i);
+			if (line !== undefined && line.trim() === targetText) {
+				count++;
+			}
+		}
+		return count;
+	}
+
+	private handleColumnAutocomplete(editor: any) {
+		if (this.isAutocompleting) return;
+
+		try {
+			const cursor = editor.getCursor();
+			const lineNum = cursor.line;
+
+			if (lineNum > 0) {
+				const prevLineContent = editor.getLine(lineNum - 1);
+				const prevTrimmed = prevLineContent.trim();
+				
+				// Match either '//column' or '//column-N' (where N is a digit)
+				if (prevTrimmed === '//column' || /^\/\/column-\d+$/.test(prevTrimmed)) {
+					const currentLineContent = editor.getLine(lineNum);
+					if (currentLineContent.trim() === '') {
+						// Count occurrences in the entire document to see if a closing tag already exists
+						const occurrence = this.getOccurrenceCount(editor, prevTrimmed, editor.lineCount() - 1);
+						
+						// If the total count in the document is odd, it means there is an unmatched opening tag.
+						// We only autocomplete when the total count is odd.
+						if (occurrence % 2 === 1) {
+							// Autocomplete only if the next line does not already have this exact tag
+							const nextLine = lineNum + 1 < editor.lineCount() ? editor.getLine(lineNum + 1) : '';
+							if (nextLine.trim() !== prevTrimmed) {
+								this.isAutocompleting = true;
+								editor.replaceRange(
+									`\n${prevTrimmed}`,
+									{ line: lineNum, ch: 0 }
+								);
+								
+								// Keep the cursor on the current empty line
+								editor.setCursor({ line: lineNum, ch: 0 });
+							}
+						}
+					}
+				}
+			}
+		} catch (e) {
+			console.error('Column autocomplete failed:', e);
+		} finally {
+			this.isAutocompleting = false;
+		}
+	}
+
+	private isInsideColumnBlock(lines: string[], targetLineIndex: number): boolean {
+		let inColumn = false;
+		for (let i = 0; i <= targetLineIndex; i++) {
+			const line = lines[i];
+			if (line !== undefined && line.trim() === '//column') {
+				inColumn = !inColumn;
+			}
+		}
+		return inColumn;
+	}
+
 	/**
 	 * Searches upward from the cursor line to find the nearest blank line,
 	 * which marks a safe markdown block boundary for splitting.
@@ -600,7 +690,9 @@ export class PdfPreviewView extends ItemView {
 		for (let i = start; i >= 0; i--) {
 			const line = lines[i];
 			if (line !== undefined && line.trim() === '') {
-				return i + 1;
+				if (!this.isInsideColumnBlock(lines, i)) {
+					return i + 1;
+				}
 			}
 		}
 		return 0;
@@ -608,8 +700,90 @@ export class PdfPreviewView extends ItemView {
 
 	// --- Post-processing (Phase 4) ---
 
+	private groupColumns(container: HTMLElement) {
+		let children = Array.from(container.children) as HTMLElement[];
+		let i = 0;
+		while (i < children.length) {
+			const child = children[i];
+			if (!child) {
+				i++;
+				continue;
+			}
+			if (child.textContent?.trim() === '//column') {
+				let closeIndex = -1;
+				for (let j = i + 1; j < children.length; j++) {
+					const nextEl = children[j];
+					if (nextEl && nextEl.textContent?.trim() === '//column') {
+						closeIndex = j;
+						break;
+					}
+				}
+
+				if (closeIndex !== -1) {
+					const rowEl = document.createElement('div');
+					rowEl.className = 'pdf-row';
+
+					// Support columns 1, 2, and 3
+					const colStarts = [-1, -1, -1, -1];
+					const colEnds = [-1, -1, -1, -1];
+
+					for (let j = i + 1; j < closeIndex; j++) {
+						const subChild = children[j];
+						if (subChild) {
+							const text = subChild.textContent?.trim();
+							const colMatch = text?.match(/^\/\/column-(\d+)$/);
+							if (colMatch && colMatch[1]) {
+								const colIdx = parseInt(colMatch[1], 10);
+								if (colIdx >= 1 && colIdx <= 3) {
+									if (colStarts[colIdx] === -1) {
+										colStarts[colIdx] = j;
+									} else {
+										colEnds[colIdx] = j;
+									}
+								}
+							}
+						}
+					}
+
+					// Build elements for each column (up to 3) in order
+					for (let colIdx = 1; colIdx <= 3; colIdx++) {
+						const cStart = colStarts[colIdx];
+						const cEnd = colEnds[colIdx];
+						if (cStart !== undefined && cEnd !== undefined && cStart !== -1 && cEnd !== -1 && cEnd > cStart) {
+							const colEl = document.createElement('div');
+							colEl.className = `pdf-col pdf-col-${colIdx}`;
+							const colElements = children.slice(cStart + 1, cEnd);
+							for (const el of colElements) {
+								if (el) colEl.appendChild(el);
+							}
+							rowEl.appendChild(colEl);
+						}
+					}
+
+					const insertBeforeEl: HTMLElement | null = (closeIndex + 1 < children.length) ? (children[closeIndex + 1] ?? null) : null;
+					for (let k = i; k <= closeIndex; k++) {
+						const markerEl = children[k];
+						if (markerEl && markerEl.parentNode === container) {
+							container.removeChild(markerEl);
+						}
+					}
+
+					container.insertBefore(rowEl, insertBeforeEl);
+
+					// Refresh the children array and restart/adjust the index
+					children = Array.from(container.children) as HTMLElement[];
+					i = children.indexOf(rowEl) + 1;
+					continue;
+				}
+			}
+			i++;
+		}
+	}
+
 	private postProcess(targetContainer: HTMLDivElement = this.activeContainer) {
 		if (!this.upperEl || !this.lowerEl) return;
+		this.groupColumns(this.upperEl);
+		this.groupColumns(this.lowerEl);
 		applyPageBreaks(this.upperEl, this.lowerEl);
 		applyVirtualPagination({
 			previewContainer: targetContainer,

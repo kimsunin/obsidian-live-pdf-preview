@@ -135,7 +135,15 @@ export function splitElementAtOverflow(el: HTMLElement, maxContentBottom: number
 	// Clone child nodes to capture original state without using innerHTML
 	const originalChildren = Array.from(el.childNodes).map(node => node.cloneNode(true));
 
-	const originalBottom = el.offsetTop + el.offsetHeight;
+	const pageEl = el.closest('.pdf-preview-page') as HTMLElement | null;
+	const getBottom = () => {
+		if (pageEl) {
+			return getElementOffsetTopRelativeTo(el, pageEl) + el.offsetHeight;
+		}
+		return el.offsetTop + el.offsetHeight;
+	};
+
+	const originalBottom = getBottom();
 	if (originalBottom <= maxContentBottom) {
 		return null;
 	}
@@ -157,7 +165,7 @@ export function splitElementAtOverflow(el: HTMLElement, maxContentBottom: number
 			tempRange.setStart(splitPoint.node, splitPoint.offset);
 			tempRange.setEndAfter(el.lastChild!);
 			const extracted = tempRange.extractContents();
-			const bottom = el.offsetTop + el.offsetHeight;
+			const bottom = getBottom();
 			el.appendChild(extracted);
 
 			if (bottom <= maxContentBottom) {
@@ -275,11 +283,204 @@ export function applyVirtualPagination(config: PaginationConfig) {
 	const paddingBottom = parseFloat(pageStyle.paddingBottom) || 0;
 	const maxContentBottom = pageHeightPx - paddingBottom;
 
-	for (const el of allElements) {
+	let elementIndex = 0;
+	while (elementIndex < allElements.length) {
+		const el = allElements[elementIndex];
+		if (!el) {
+			elementIndex++;
+			continue;
+		}
+
 		// Check if manual page break
 		if (el.classList.contains('pdf-page-break')) {
 			currentPage.appendChild(el);
 			currentPage = createPageElement(previewContainer);
+			elementIndex++;
+			continue;
+		}
+
+		// If it is a multi-column row (pdf-row) — try to fit or split column elements
+		if (el.classList.contains('pdf-row')) {
+			currentPage.appendChild(el);
+			const rowBottom = el.offsetTop + el.offsetHeight;
+			const rowStyle = window.getComputedStyle(el);
+			const rowMarginBottom = parseFloat(rowStyle.marginBottom) || 0;
+
+			if (rowBottom + rowMarginBottom <= maxContentBottom) {
+				elementIndex++;
+				continue;
+			}
+
+			// The entire row does NOT fit — split it across pages
+			currentPage.removeChild(el);
+
+			const columns = Array.from(el.querySelectorAll('.pdf-col')) as HTMLElement[];
+			const sectionAttr = el.getAttribute('data-section') || '';
+
+			// Create the row container on the current page
+			const currentRowEl = currentPage.createEl('div');
+			currentRowEl.className = el.className;
+			currentRowEl.style.cssText = el.style.cssText;
+			currentRowEl.setAttribute('data-section', sectionAttr);
+
+			const currentColEls: HTMLElement[] = [];
+			const nextColElements: HTMLElement[][] = [];
+
+			columns.forEach((col, colIdx) => {
+				const currentColEl = currentRowEl.createEl('div');
+				currentColEl.className = col.className;
+				currentColEl.style.cssText = col.style.cssText;
+				currentColEls.push(currentColEl);
+				nextColElements.push([]);
+			});
+
+			// Append elements child-by-child in each column and check height
+			columns.forEach((col, colIdx) => {
+				const colChildren = Array.from(col.children) as HTMLElement[];
+				const currentColEl = currentColEls[colIdx];
+				if (!currentColEl) return;
+
+				let hasOverflowed = false;
+
+				for (const child of colChildren) {
+					const htmlChild = child as HTMLElement;
+
+					// Check if this is a column-local page break (//page)
+					if (htmlChild.classList.contains('pdf-page-break')) {
+						htmlChild.remove();
+						hasOverflowed = true;
+						continue;
+					}
+
+					// Handle nested lists (UL/OL) inside columns to split them item-by-item
+					if (htmlChild.tagName === 'UL' || htmlChild.tagName === 'OL') {
+						const listType = htmlChild.tagName.toLowerCase();
+						const listItems = Array.from(htmlChild.children) as HTMLElement[];
+						const sectionAttr = htmlChild.getAttribute('data-section') || '';
+
+						let currentListContainer = currentColEl.createEl(listType as keyof HTMLElementTagNameMap);
+						currentListContainer.className = htmlChild.className;
+						currentListContainer.style.cssText = htmlChild.style.cssText;
+						currentListContainer.setAttribute('data-section', sectionAttr);
+
+						let itemIndex = 1;
+
+						for (const li of listItems) {
+							const htmlLi = li as HTMLElement;
+							if (hasOverflowed) {
+								const nextListContainer = getOrCreateNextListContainer(nextColElements[colIdx], listType, htmlChild, sectionAttr);
+								nextListContainer.appendChild(htmlLi);
+								continue;
+							}
+
+							currentListContainer.appendChild(htmlLi);
+
+							const childRect = htmlLi.getBoundingClientRect();
+							const pageRect = currentPage.getBoundingClientRect();
+							const scaleFactor = currentPage.offsetWidth > 0 ? (pageRect.width / currentPage.offsetWidth) : 1;
+							const totalBottom = scaleFactor > 0 ? (childRect.bottom - pageRect.top) / scaleFactor : (childRect.bottom - pageRect.top);
+
+							const isFirstEl = (currentListContainer.children.length === 1 && currentColEl.children.length === 1 && currentPage.children.length <= 1);
+
+							if (!isFirstEl && totalBottom > maxContentBottom) {
+								const nextLi = splitElementAtOverflow(htmlLi, maxContentBottom);
+								if (nextLi) {
+									nextLi.classList.add('pdf-list-split-continuation');
+									const nextListContainer = getOrCreateNextListContainer(nextColElements[colIdx], listType, htmlChild, sectionAttr);
+									if (listType === 'ol') {
+										nextListContainer.setAttribute('start', String(itemIndex));
+									}
+									nextListContainer.appendChild(nextLi as HTMLElement);
+								} else {
+									currentListContainer.removeChild(htmlLi);
+									const nextListContainer = getOrCreateNextListContainer(nextColElements[colIdx], listType, htmlChild, sectionAttr);
+									if (listType === 'ol') {
+										nextListContainer.setAttribute('start', String(itemIndex));
+									}
+									nextListContainer.appendChild(htmlLi);
+								}
+								hasOverflowed = true;
+							}
+							itemIndex++;
+						}
+
+						if (currentListContainer.children.length === 0) {
+							currentListContainer.remove();
+						}
+
+						continue;
+					}
+
+					if (hasOverflowed) {
+						const nextCol = nextColElements[colIdx];
+						if (nextCol) nextCol.push(htmlChild);
+						continue;
+					}
+
+					currentColEl.appendChild(htmlChild);
+
+					const childRect = htmlChild.getBoundingClientRect();
+					const pageRect = currentPage.getBoundingClientRect();
+					const scaleFactor = currentPage.offsetWidth > 0 ? (pageRect.width / currentPage.offsetWidth) : 1;
+					const totalBottom = scaleFactor > 0 ? (childRect.bottom - pageRect.top) / scaleFactor : (childRect.bottom - pageRect.top);
+
+					// If this is the absolute first element on the current page inside the columns,
+					// keep it to avoid infinite loops, even if it overflows.
+					const isFirstEl = (currentColEl.children.length === 1 && currentPage.children.length <= 1);
+
+					if (!isFirstEl && totalBottom > maxContentBottom) {
+						const nextEl = splitElementAtOverflow(htmlChild, maxContentBottom);
+						if (nextEl) {
+							const nextCol = nextColElements[colIdx];
+							if (nextCol) nextCol.push(nextEl as HTMLElement);
+						} else {
+							currentColEl.removeChild(htmlChild);
+							const nextCol = nextColElements[colIdx];
+							if (nextCol) nextCol.push(htmlChild);
+						}
+						hasOverflowed = true;
+					}
+				}
+			});
+
+			// If all columns are completely empty on the current page, remove the current row container
+			const totalChildrenOnCurrentPage = currentColEls.reduce((sum, col) => sum + col.children.length, 0);
+			if (totalChildrenOnCurrentPage === 0) {
+				currentRowEl.remove();
+			}
+
+			// Check if we actually have any overflowed elements
+			const totalOverflowedElements = nextColElements.reduce((sum, list) => sum + list.length, 0);
+			if (totalOverflowedElements > 0) {
+				// We create a new page for the remaining elements
+				currentPage = createPageElement(previewContainer);
+
+				// Create the new row container for the next page (detached)
+				const nextRowEl = document.createElement('div');
+				nextRowEl.className = el.className;
+				nextRowEl.style.cssText = el.style.cssText;
+				nextRowEl.setAttribute('data-section', sectionAttr);
+
+				columns.forEach((col, colIdx) => {
+					const nextColEl = nextRowEl.createEl('div');
+					nextColEl.className = col.className;
+					nextColEl.style.cssText = col.style.cssText;
+					
+					const overflowChildren = nextColElements[colIdx];
+					if (overflowChildren) {
+						overflowChildren.forEach(child => {
+							nextColEl.appendChild(child);
+						});
+					}
+				});
+
+				// Insert the nextRowEl into the elements array for processing on the next iteration
+				const currentIndex = allElements.indexOf(el);
+				allElements.splice(currentIndex + 1, 0, nextRowEl);
+			}
+
+			el.remove();
+			elementIndex++;
 			continue;
 		}
 
@@ -291,6 +492,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 			const listMarginBottom = parseFloat(listStyle.marginBottom) || 0;
 
 			if (listBottom + listMarginBottom <= maxContentBottom) {
+				elementIndex++;
 				continue;
 			}
 
@@ -350,6 +552,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 				itemIndex++;
 			}
 			el.remove();
+			elementIndex++;
 			continue;
 		}
 
@@ -364,7 +567,6 @@ export function applyVirtualPagination(config: PaginationConfig) {
 		const isFirstElement = (currentPage.children.length <= 1);
 		let shouldMove = (!isFirstElement && totalBottom > maxContentBottom);
 
-
 		if (shouldMove) {
 			const nextEl = splitElementAtOverflow(el, maxContentBottom);
 			if (nextEl) {
@@ -376,6 +578,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 				currentPage.appendChild(el);
 			}
 		}
+		elementIndex++;
 	}
 
 	// Add page numbers if enabled
@@ -397,4 +600,30 @@ export function applyVirtualPagination(config: PaginationConfig) {
 			}
 		}
 	});
+}
+
+function getElementOffsetTopRelativeTo(el: HTMLElement, targetParent: HTMLElement): number {
+	let offsetTop = 0;
+	let current: HTMLElement | null = el;
+	while (current && current !== targetParent && current !== document.body) {
+		offsetTop += current.offsetTop;
+		current = current.offsetParent as HTMLElement | null;
+	}
+	return offsetTop;
+}
+
+function getOrCreateNextListContainer(overflowList: HTMLElement[] | undefined, listType: string, originalList: HTMLElement, sectionAttr: string): HTMLElement {
+	if (!overflowList) {
+		return document.createElement(listType);
+	}
+	const lastEl = overflowList.length > 0 ? overflowList[overflowList.length - 1] : null;
+	if (lastEl && lastEl.tagName.toLowerCase() === listType) {
+		return lastEl;
+	}
+	const nextListContainer = document.createElement(listType) as HTMLElement;
+	nextListContainer.className = originalList.className;
+	nextListContainer.style.cssText = originalList.style.cssText;
+	nextListContainer.setAttribute('data-section', sectionAttr);
+	overflowList.push(nextListContainer);
+	return nextListContainer;
 }

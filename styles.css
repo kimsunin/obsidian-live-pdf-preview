@@ -455,3 +455,24 @@ li.pdf-list-split-continuation::after {
 .pdf-print-clone .copy-code-button {
 	display: none !important;
 }
+
+/* Multi-column layout support (Phase 9) */
+.pdf-row {
+	display: flex !important;
+	gap: 15mm; /* 15mm gap between columns */
+	width: 100%;
+	margin: 1.5em 0;
+}
+
+.pdf-col {
+	flex: 1;
+	min-width: 0;
+}
+
+/* Ensure images inside columns scale down to fit column width while keeping aspect ratio */
+.pdf-col img {
+	max-width: 100% !important;
+	height: auto !important;
+	object-fit: contain !important;
+}
+
