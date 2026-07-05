@@ -499,5 +499,12 @@ li.pdf-list-split-continuation::after {
 .pdf-center-block ul, .pdf-center-block ol {
 	display: inline-block;
 	text-align: left;
+	padding-left: 2em !important;
+	padding-right: 2em !important;
+}
+
+.pdf-center-block blockquote {
+	margin-left: 2em !important;
+	margin-right: 2em !important;
 }
 

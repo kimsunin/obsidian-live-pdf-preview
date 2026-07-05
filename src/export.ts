@@ -16,18 +16,7 @@ interface ElectronWebContents {
 interface ElectronModule {
 	remote: {
 		getCurrentWebContents(): ElectronWebContents;
-		dialog: {
-			showSaveDialog(options: {
-				title: string;
-				defaultPath: string;
-				filters: { name: string; extensions: string[] }[];
-			}): Promise<{ canceled: boolean; filePath?: string }>;
-		};
 	};
-}
-
-interface NodeFS {
-	writeFileSync(path: string, data: Uint8Array): void;
 }
 
 export class ExportPdfModal extends Modal {
@@ -154,7 +143,6 @@ export async function exportToPdf(config: ExportConfig) {
 	try {
 		const globalWindow = window as unknown as { 
 			require(module: 'electron'): ElectronModule; 
-			require(module: 'fs'): NodeFS; 
 		};
 		const electron = globalWindow.require('electron');
 		const webContents = electron.remote ? electron.remote.getCurrentWebContents() : null;
@@ -218,19 +206,17 @@ export async function exportToPdf(config: ExportConfig) {
 		await addOutline(pdfDoc, bookmarks);
 		const finalPdfBytes = await pdfDoc.save();
 
-		// 6. Save the file using Electron save dialog
-		const remote = electron.remote;
-		const result = await remote.dialog.showSaveDialog({
-			title: 'Save PDF',
-			defaultPath: `${currentFile.basename}.pdf`,
-			filters: [{ name: 'PDF Files', extensions: ['pdf'] }],
-		});
-
-		if (!result.canceled && result.filePath) {
-			const fs = globalWindow.require('fs');
-			fs.writeFileSync(result.filePath, finalPdfBytes);
-			new Notice(`PDF successfully exported to: ${result.filePath}`);
-		}
+		// 6. Save the file using standard Web Blob download trigger
+		const blob = new Blob([finalPdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' });
+		const url = URL.createObjectURL(blob);
+		const downloadLink = activeDocument.createElement('a');
+		downloadLink.href = url;
+		downloadLink.download = `${currentFile.basename}.pdf`;
+		activeDocument.body.appendChild(downloadLink);
+		downloadLink.click();
+		downloadLink.remove();
+		URL.revokeObjectURL(url);
+		new Notice('PDF successfully exported!');
 	} catch (error) {
 		console.error('PDF export failed:', error);
 		// Safe cleanup

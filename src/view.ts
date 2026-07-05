@@ -1,4 +1,4 @@
-import { Component, ItemView, MarkdownRenderer, WorkspaceLeaf, TFile, setIcon, debounce, MarkdownView } from 'obsidian';
+import { Component, ItemView, MarkdownRenderer, WorkspaceLeaf, TFile, setIcon, debounce, MarkdownView, Editor } from 'obsidian';
 import { restoreFromPages, applyPageBreaks, applyVirtualPagination } from './pagination';
 import { ExportPdfModal, exportToPdf } from './export';
 
@@ -613,7 +613,7 @@ export class PdfPreviewView extends ItemView {
 		return lines.join('\n');
 	}
 
-	private getOccurrenceCount(editor: any, targetText: string, limitLine: number): number {
+	private getOccurrenceCount(editor: Editor, targetText: string, limitLine: number): number {
 		let count = 0;
 		for (let i = 0; i <= limitLine; i++) {
 			const line = editor.getLine(i);
@@ -624,7 +624,7 @@ export class PdfPreviewView extends ItemView {
 		return count;
 	}
 
-	private handleColumnAutocomplete(editor: any) {
+	private handleColumnAutocomplete(editor: Editor) {
 		if (this.isAutocompleting) return;
 
 		try {
@@ -731,7 +731,7 @@ export class PdfPreviewView extends ItemView {
 				}
 
 				if (closeIndex !== -1) {
-					const rowEl = document.createElement('div');
+					const rowEl = activeDocument.createElement('div');
 					rowEl.className = 'pdf-row';
 
 					// Support columns 1, 2, and 3
@@ -761,7 +761,7 @@ export class PdfPreviewView extends ItemView {
 						const cStart = colStarts[colIdx];
 						const cEnd = colEnds[colIdx];
 						if (cStart !== undefined && cEnd !== undefined && cStart !== -1 && cEnd !== -1 && cEnd > cStart) {
-							const colEl = document.createElement('div');
+							const colEl = activeDocument.createElement('div');
 							colEl.className = `pdf-col pdf-col-${colIdx}`;
 							const colElements = children.slice(cStart + 1, cEnd);
 							for (const el of colElements) {
@@ -811,7 +811,7 @@ export class PdfPreviewView extends ItemView {
 				}
 
 				if (closeIndex !== -1) {
-					const centerEl = document.createElement('div');
+					const centerEl = activeDocument.createElement('div');
 					centerEl.className = 'pdf-center-block';
 
 					const contentElements = children.slice(i + 1, closeIndex);

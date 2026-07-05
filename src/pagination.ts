@@ -357,7 +357,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 				let hasOverflowed = false;
 
 				for (const child of colChildren) {
-					const htmlChild = child as HTMLElement;
+					const htmlChild = child;
 
 					// Check if this is a column-local page break (//page)
 					if (htmlChild.classList.contains('pdf-page-break')) {
@@ -412,7 +412,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 									if (listType === 'ol') {
 										nextListContainer.setAttribute('start', String(itemIndex));
 									}
-									nextListContainer.appendChild(nextLi as HTMLElement);
+									nextListContainer.appendChild(nextLi);
 								} else {
 									currentListContainer.removeChild(htmlLi);
 									const nextListContainer = getOrCreateNextListContainer(nextColElements[colIdx], listType, htmlChild, sectionAttr);
@@ -454,7 +454,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 						const nextEl = splitElementAtOverflow(htmlChild, maxContentBottom);
 						if (nextEl) {
 							const nextCol = nextColElements[colIdx];
-							if (nextCol) nextCol.push(nextEl as HTMLElement);
+							if (nextCol) nextCol.push(nextEl);
 						} else {
 							currentColEl.removeChild(htmlChild);
 							const nextCol = nextColElements[colIdx];
@@ -478,7 +478,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 				currentPage = createPageElement(previewContainer);
 
 				// Create the new row container for the next page (detached)
-				const nextRowEl = document.createElement('div');
+				const nextRowEl = activeDocument.createElement('div');
 				nextRowEl.className = el.className;
 				nextRowEl.style.cssText = el.style.cssText;
 				nextRowEl.setAttribute('data-section', sectionAttr);
@@ -534,7 +534,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 			let hasOverflowed = false;
 
 			for (const child of centerChildren) {
-				const htmlChild = child as HTMLElement;
+				const htmlChild = child;
 
 				// Check if this is a center-local page break (//page)
 				if (htmlChild.classList.contains('pdf-page-break')) {
@@ -565,7 +565,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 					let itemIndex = 1;
 
 					for (const li of listItems) {
-						const htmlLi = li as HTMLElement;
+						const htmlLi = li;
 						if (hasOverflowed) {
 							const nextListContainer = getOrCreateNextListContainer(nextCenterElements, listType, htmlChild, listSectionAttr);
 							nextListContainer.appendChild(htmlLi);
@@ -589,7 +589,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 								if (listType === 'ol') {
 									nextListContainer.setAttribute('start', String(itemIndex));
 								}
-								nextListContainer.appendChild(nextLi as HTMLElement);
+								nextListContainer.appendChild(nextLi);
 							} else {
 								currentListContainer.removeChild(htmlLi);
 								const nextListContainer = getOrCreateNextListContainer(nextCenterElements, listType, htmlChild, listSectionAttr);
@@ -629,7 +629,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 				if (!isFirstEl && totalBottom > maxContentBottom) {
 					const nextChild = splitElementAtOverflow(htmlChild, maxContentBottom);
 					if (nextChild) {
-						nextCenterElements.push(nextChild as HTMLElement);
+						nextCenterElements.push(nextChild);
 					} else {
 						currentCenterEl.removeChild(htmlChild);
 						nextCenterElements.push(htmlChild);
@@ -647,7 +647,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 			if (nextCenterElements.length > 0) {
 				currentPage = createPageElement(previewContainer);
 
-				const nextCenterEl = document.createElement('div');
+				const nextCenterEl = activeDocument.createElement('div');
 				nextCenterEl.className = el.className;
 				nextCenterEl.style.cssText = el.style.cssText;
 				nextCenterEl.setAttribute('data-section', sectionAttr);
@@ -685,7 +685,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 			// Parse header rows and body rows
 			const thead = el.querySelector('thead');
 			const tbody = el.querySelector('tbody');
-			const allRows = Array.from(el.querySelectorAll('tr')) as HTMLTableRowElement[];
+			const allRows = Array.from(el.querySelectorAll('tr'));
 
 			let headerRows: HTMLTableRowElement[] = [];
 			let bodyRows: HTMLTableRowElement[] = [];
@@ -755,7 +755,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 			if (nextBodyRows.length > 0) {
 				currentPage = createPageElement(previewContainer);
 
-				const nextTable = document.createElement('table');
+				const nextTable = activeDocument.createElement('table');
 				nextTable.className = el.className;
 				nextTable.style.cssText = el.style.cssText;
 				nextTable.setAttribute('data-section', sectionAttr);
@@ -901,7 +901,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 function getElementOffsetTopRelativeTo(el: HTMLElement, targetParent: HTMLElement): number {
 	let offsetTop = 0;
 	let current: HTMLElement | null = el;
-	while (current && current !== targetParent && current !== document.body) {
+	while (current && current !== targetParent && current !== activeDocument.body) {
 		offsetTop += current.offsetTop;
 		current = current.offsetParent as HTMLElement | null;
 	}
@@ -910,13 +910,13 @@ function getElementOffsetTopRelativeTo(el: HTMLElement, targetParent: HTMLElemen
 
 function getOrCreateNextListContainer(overflowList: HTMLElement[] | undefined, listType: string, originalList: HTMLElement, sectionAttr: string): HTMLElement {
 	if (!overflowList) {
-		return document.createElement(listType);
+		return activeDocument.createElement(listType);
 	}
 	const lastEl = overflowList.length > 0 ? overflowList[overflowList.length - 1] : null;
 	if (lastEl && lastEl.tagName.toLowerCase() === listType) {
 		return lastEl;
 	}
-	const nextListContainer = document.createElement(listType) as HTMLElement;
+	const nextListContainer = activeDocument.createElement(listType);
 	nextListContainer.className = originalList.className;
 	nextListContainer.style.cssText = originalList.style.cssText;
 	nextListContainer.setAttribute('data-section', sectionAttr);
@@ -935,7 +935,7 @@ function splitTableInsideContainer(
 	const sectionAttr = table.getAttribute('data-section') || '';
 	const thead = table.querySelector('thead');
 	const tbody = table.querySelector('tbody');
-	const allRows = Array.from(table.querySelectorAll('tr')) as HTMLTableRowElement[];
+	const allRows = Array.from(table.querySelectorAll('tr'));
 
 	let headerRows: HTMLTableRowElement[] = [];
 	let bodyRows: HTMLTableRowElement[] = [];
@@ -1008,13 +1008,13 @@ function getOrCreateNextTableContainer(
 	sectionAttr: string
 ): HTMLElement {
 	if (!overflowList) {
-		return document.createElement('table');
+		return activeDocument.createElement('table');
 	}
 	const lastEl = overflowList.length > 0 ? overflowList[overflowList.length - 1] : null;
 	if (lastEl && lastEl.tagName.toLowerCase() === 'table') {
 		return lastEl;
 	}
-	const nextTable = document.createElement('table') as HTMLElement;
+	const nextTable = activeDocument.createElement('table');
 	nextTable.className = originalTable.className;
 	nextTable.style.cssText = originalTable.style.cssText;
 	nextTable.setAttribute('data-section', sectionAttr);
