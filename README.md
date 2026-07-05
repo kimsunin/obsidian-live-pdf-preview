@@ -17,45 +17,41 @@ It streamlines your writing workflow by combining document editing and publicati
 
 ## Key Features
 
-### 1. Zero-Flicker Real-Time Preview
+### 1. Real-Time Print Preview
 
-- A virtual A4 sheet (`210mm` x `297mm`) appears in the right sidebar, rendering your edits instantly.
-- **Twin-Canvas Page Flipping:** Powered by an atomic double-buffering architecture, the preview updates seamlessly as you type with absolutely **zero screen flashes or flickers**.
-- The preview scales and fits automatically when you expand or shrink the sidebar panel width.
+- **Live Page Rendering:** Renders your edits instantly on a virtual print page (supporting A4, Letter, A3, etc.).
+- **Responsive Scaling:** The preview automatically scales to fit when you resize the sidebar panel.
 
-### 2. Smart Edit-Position Scroll Sync
+### 2. Cursor Scroll Sync
 
-- **Automatic Viewport Alignment:** The plugin detects your active cursor position. If you start editing a section that is out of the preview's viewport, it smoothly scrolls to align that block to the top of the preview screen.
-- **Intelligent Visibility Guard:** If your editing position is already visible on the screen, the scroll remains locked to prevent dizzying screen jitters while typing.
+- **Auto-Scrolling:** Automatically scrolls the preview page to match your active cursor position in the editor, keeping your edits in view.
 
-### 3. Smart Page Transitions & Pagination
+### 3. Smart Pagination & Formatting
 
-- Text blocks and list items that overflow the page boundary split cleanly **line-by-line onto the next page** instead of cutting off mid-character.
-- Continued list items across page breaks automatically omit duplicate bullet points or numbering prefixes for a clean publication format.
+- **Clean Transitions:** Paragraphs, lists, tables, and code blocks that overflow the page boundary split cleanly onto the next page instead of cutting off mid-line.
+- **Continuous Lists:** List items split across pages preserve continuous numbering and omit duplicate bullet points.
 
-### 4. Custom Page Breaks (`//page`)
+### 4. Print Layout Commands (`//` Commands)
 
-- Want to start a new page? Simply type **`//page`** on its own line in the editor, and the subsequent content will begin on a fresh page instantly.
+The plugin provides native layout commands written on their own lines:
 
-![Paging Screenshot](./assets/2026-06-30_paging.png)
+- **`//page` (Page Break):** Forces content onto a new page. Inside a column, it splits only that column.
+  
+  ![Page Break Screenshot](./assets/2026-06-30_paging.png)
+  
+- **`//column` (Multi-Column Layout):** Creates side-by-side columns (up to 3 columns using `//column-1`, `//column-2`, `//column-3`). Includes smart autocomplete for closing tags.
+  
+  ![Multi Column Layout Screenshot](./assets/2026-06-30_multi_layout.png)
+  
+- **`//center` (Center Alignment):** Centers text, lists, tables, code blocks, and images, while keeping list items left-aligned for readability. Includes smart autocomplete.
 
-### 5. Multi-Column Layout (1 to 3 Columns)
+  ![Center Alignment Block Screenshot](./assets/2026-06-30_center_layout.png)
 
-- Wrap sections in **`//column`** tags to arrange content side-by-side.
-- Define columns using **`//column-1`**, **`//column-2`**, or **`//column-3`** (supports up to 3 columns).
-- **Smart Autocomplete:** Typing a column marker and hitting `Enter` automatically appends the corresponding closing tag for you, preventing broken layout structure.
-- **Independent Page Flow & Splitting:**
-  - If a column contains long paragraphs or lists that exceed the page height limit, they will split cleanly **line-by-line or item-by-item** to the next page, while the other columns remain unaffected.
-  - Numbered lists (`<ol>`) split across pages preserve their continuous indexing.
-- **Local Page Breaks:** Typing **`//page`** inside a specific column will force the subsequent content of *only that column* to flow to the next page, keeping the adjacent columns intact.
-![Multi Column Layout](./assets/2026-06-30_multi_layout.png)
+### 5. PDF Export with Bookmarks
 
-### 6. One-Click PDF Export with Outlines
-
-- Click the 🖨️ (printer icon) on the top right of the preview header to save your document as a PDF.
-- Document headings (`# H1` to `###### H6`) are automatically converted into **interactive PDF outlines (bookmarks)**, allowing readers to jump between sections in any PDF viewer.
-- **Unicode Outline Support:** Fully supports non-ASCII / Unicode characters (like Korean, CJK, etc.) in the PDF Outline navigation tree without text corruption.
-- **Clean Print Layout:** Obsidian's default code block copy buttons are automatically hidden inside both the A4 preview screen and the exported PDF to ensure visual publication quality.
+- **One-Click Export:** Click the printer icon (🖨️) to save your document as a print-ready PDF.
+- **Interactive Outlines:** Document headings (`# H1` to `###### H6`) automatically become interactive PDF outlines/bookmarks with full Unicode (Korean, CJK, etc.) support.
+- **Polished Output:** Automatically hides temporary interface items like code copy buttons in the exported document.
 
 ## How to Use
 
@@ -67,13 +63,15 @@ It streamlines your writing workflow by combining document editing and publicati
 
 ### 2. Customizing the Page Layout
 
-Click the gear icon (⚙️) on the top right of the preview header to open page settings:
+Click the gear icon (⚙️) on the top right of the preview header to open the page settings:
 
-- **Page size:** Select A4, Letter, A3, A5, or Legal dimensions.
-- **Margins:** Choose Default (20mm), None (0mm), or Small (10mm).
-- **Downscale percent:** Scale/Zoom the preview text and layout size (50% to 150%).
-- **Landscape:** Toggle between Portrait and Landscape layouts.
-- **Show file name as title:** Automatically render the filename as the main document header.
+| Setting | Description | Options |
+| :--- | :--- | :--- |
+| **Page size** | Set the physical dimensions of the virtual page. | A4, Letter, A3, A5, Legal |
+| **Margins** | Choose the outer padding margins for the A4 sheet. | Default (20mm), None (0mm), Small (10mm) |
+| **Downscale percent** | Adjust the zoom/scale factor of the preview text and layout. | 50% to 150% (Default: 100%) |
+| **Landscape** | Toggle between Portrait (vertical) and Landscape (horizontal). | Toggle ON/OFF |
+| **Show file name as title** | Render the file name as the document's main heading. | Toggle ON/OFF |
 
 ![Page Layout Settings Modal](./assets/2026-06-30_setting.png)
 
