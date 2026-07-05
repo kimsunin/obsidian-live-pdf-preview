@@ -108,6 +108,8 @@
 	--background-primary-alt: #fafafa !important;
 	--background-modifier-border: #e0e0e0 !important;
 	--hr-color: #e0e0e0 !important;
+	--table-header-color: var(--text-normal) !important;
+	--table-header-background: var(--background-secondary) !important;
 }
 
 /* Force light-theme high-contrast syntax highlighting for code blocks inside the preview page */
@@ -224,6 +226,17 @@
 }
 .pdf-preview-page .callout {
 	margin: 1em 0 1em 2em !important; /* Left margin to indent callouts */
+	--callout-blend-mode: normal !important;
+	mix-blend-mode: normal !important;
+	background-color: rgba(var(--callout-color), 0.08) !important;
+	border: 1px solid rgba(var(--callout-color), 0.25) !important;
+	border-left: 4px solid rgb(var(--callout-color)) !important;
+}
+.pdf-preview-page .callout-title {
+	color: rgb(var(--callout-color)) !important;
+}
+.pdf-preview-page .callout-content {
+	color: var(--text-normal) !important;
 }
 
 
@@ -233,14 +246,17 @@
 	border-collapse: collapse;
 	width: 100%;
 	margin: 1em 0;
+	color: var(--text-normal) !important;
 }
 .pdf-preview-page th,
 .pdf-preview-page td {
 	border: 1px solid var(--background-modifier-border) !important;
 	padding: 6px 10px;
+	color: var(--text-normal) !important;
 }
 .pdf-preview-page th {
 	background-color: var(--background-secondary) !important;
+	color: var(--text-normal) !important;
 }
 
 /* Ensure Mermaid diagrams fit within the page margins and scale responsively */
