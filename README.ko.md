@@ -75,6 +75,12 @@ Obsidian에서 문서를 편집하면서 **실제 인쇄물(A4) 형식의 레이
 
 ![Page Layout Settings Modal](./assets/2026-06-30_setting.png)
 
-## Multilingual Readme
+### 3. 커스텀 CSS 스타일시트 (Custom CSS)
 
-- [English Version](./README.md)
+미리보기 헤더 우측의 팔레트(🎨) 아이콘을 클릭하여 사용자 정의 CSS를 적용할 수 있습니다
+
+![Page Layout Settings Modal](./assets/2026-06-30_custom_css.png)
+
+## 라이선스 (License)
+
+이 프로젝트는 [MIT 라이선스](LICENSE)를 따릅니다.

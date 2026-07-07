@@ -75,6 +75,13 @@ Click the gear icon (⚙️) on the top right of the preview header to open the 
 
 ![Page Layout Settings Modal](./assets/2026-06-30_setting.png)
 
-## Multilingual Readme
+### 3. Custom CSS Stylesheet
 
-- [한국어 버전 (Korean Version)](./README.ko.md)
+Click the palette icon (🎨) next to the settings gear on the preview header to apply custom CSS
+
+![Page Layout Settings Modal](./assets/2026-06-30_custom_css.png)
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
+
