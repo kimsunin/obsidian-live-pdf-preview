@@ -1,4 +1,4 @@
-import { App, Modal, Notice, Setting } from 'obsidian';
+import { App, Modal, Notice, Setting, DropdownComponent, SliderComponent, ToggleComponent } from 'obsidian';
 import { PDFDocument } from 'pdf-lib';
 import { addOutline } from './pdf-outline';
 import type { PdfPreviewView } from './view';
@@ -21,6 +21,12 @@ interface ElectronModule {
 
 export class ExportPdfModal extends Modal {
 	private view: PdfPreviewView;
+	private isConfirmed = false;
+	private originalPageSize!: string;
+	private originalMargin!: string;
+	private originalScale!: number;
+	private originalLandscape!: boolean;
+	private originalShowTitle!: boolean;
 
 	constructor(app: App, view: PdfPreviewView) {
 		super(app);
@@ -33,10 +39,24 @@ export class ExportPdfModal extends Modal {
 		
 		this.titleEl.setText('Page settings');
 
+		// Store original values
+		this.originalPageSize = this.view.pageSize;
+		this.originalMargin = this.view.margin;
+		this.originalScale = this.view.scale;
+		this.originalLandscape = this.view.landscape;
+		this.originalShowTitle = this.view.showTitle;
+
+		let sizeDropdown!: DropdownComponent;
+		let marginDropdown!: DropdownComponent;
+		let scaleSlider!: SliderComponent;
+		let landscapeToggle!: ToggleComponent;
+		let showTitleToggle!: ToggleComponent;
+
 		// 1. Page Size
 		new Setting(contentEl)
 			.setName('Page size')
 			.addDropdown(dropdown => {
+				sizeDropdown = dropdown;
 				dropdown
 					.addOptions({
 						'A4': 'A4',
@@ -56,6 +76,7 @@ export class ExportPdfModal extends Modal {
 		new Setting(contentEl)
 			.setName('Margins')
 			.addDropdown(dropdown => {
+				marginDropdown = dropdown;
 				dropdown
 					.addOptions({
 						'20mm': 'Default',
@@ -73,6 +94,7 @@ export class ExportPdfModal extends Modal {
 		new Setting(contentEl)
 			.setName('Downscale percent')
 			.addSlider(slider => {
+				scaleSlider = slider;
 				slider
 					.setLimits(50, 150, 5)
 					.setValue(this.view.scale)
@@ -87,6 +109,7 @@ export class ExportPdfModal extends Modal {
 		new Setting(contentEl)
 			.setName('Landscape')
 			.addToggle(toggle => {
+				landscapeToggle = toggle;
 				toggle
 					.setValue(this.view.landscape)
 					.onChange(value => {
@@ -99,6 +122,7 @@ export class ExportPdfModal extends Modal {
 		new Setting(contentEl)
 			.setName('Show file name as title')
 			.addToggle(toggle => {
+				showTitleToggle = toggle;
 				toggle
 					.setValue(this.view.showTitle)
 					.onChange(value => {
@@ -114,16 +138,155 @@ export class ExportPdfModal extends Modal {
 			attr: { style: 'margin-top: 24px; display: flex; justify-content: flex-end; gap: 12px;' }
 		});
 
+		const resetBtn = buttonContainer.createEl('button', {
+			text: 'Reset',
+		});
+		resetBtn.addEventListener('click', () => {
+			// Reset to defaults in view properties (temporary until Done is clicked)
+			this.view.pageSize = 'A4';
+			this.view.margin = '20mm';
+			this.view.scale = 100;
+			this.view.landscape = false;
+			
+			const showTitleChanged = this.view.showTitle !== true;
+			this.view.showTitle = true;
+
+			// Update UI components in the modal
+			sizeDropdown.setValue('A4');
+			marginDropdown.setValue('20mm');
+			scaleSlider.setValue(100);
+			landscapeToggle.setValue(false);
+			showTitleToggle.setValue(true);
+			
+			if (showTitleChanged) {
+				this.view.cachedUpperText = ''; // Force redraw
+				void this.view.renderFull();
+			}
+			this.view.updateLayoutSettings();
+		});
+
 		const doneBtn = buttonContainer.createEl('button', {
 			cls: 'mod-cta',
 			text: 'Done',
 		});
-		doneBtn.addEventListener('click', () => this.close());
+		doneBtn.addEventListener('click', () => {
+			this.isConfirmed = true;
+			// Persist settings
+			this.view.plugin.settings.pageSize = this.view.pageSize;
+			this.view.plugin.settings.margin = this.view.margin;
+			this.view.plugin.settings.scale = this.view.scale;
+			this.view.plugin.settings.landscape = this.view.landscape;
+			this.view.plugin.settings.showTitle = this.view.showTitle;
+			void this.view.plugin.saveSettings();
+			this.close();
+		});
 	}
 
 	onClose() {
 		const { contentEl } = this;
 		contentEl.empty();
+
+		if (!this.isConfirmed) {
+			// Restore original values
+			this.view.pageSize = this.originalPageSize;
+			this.view.margin = this.originalMargin;
+			this.view.scale = this.originalScale;
+			this.view.landscape = this.originalLandscape;
+			if (this.view.showTitle !== this.originalShowTitle) {
+				this.view.showTitle = this.originalShowTitle;
+				this.view.cachedUpperText = ''; // Force redraw
+				void this.view.renderFull();
+			}
+			this.view.updateLayoutSettings();
+		}
+	}
+}
+
+export class CustomCssModal extends Modal {
+	private view: PdfPreviewView;
+	private isConfirmed = false;
+	private originalCss!: string;
+
+	constructor(app: App, view: PdfPreviewView) {
+		super(app);
+		this.view = view;
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.empty();
+		
+		this.titleEl.setText('Custom CSS');
+		
+		this.originalCss = this.view.plugin.settings.customCss || '';
+
+		const textareaContainer = contentEl.createEl('div', {
+			attr: { style: 'width: 100%; margin-bottom: 20px;' }
+		});
+
+		const textarea = textareaContainer.createEl('textarea', {
+			attr: {
+				style: 'width: 100%; height: 250px; font-family: monospace; font-size: 13px; resize: vertical; box-sizing: border-box; padding: 10px;',
+				placeholder: '/* Example: */\nh1 {\n    color: #4a90e2;\n}\ntable th {\n    background-color: #e3faf2;\n}'
+			}
+		});
+		textarea.value = this.originalCss;
+
+		// Allow Tab key to insert 4 spaces instead of losing focus
+		textarea.addEventListener('keydown', (e: KeyboardEvent) => {
+			if (e.key === 'Tab') {
+				e.preventDefault();
+				const start = textarea.selectionStart;
+				const end = textarea.selectionEnd;
+				const val = textarea.value;
+				textarea.value = val.substring(0, start) + '    ' + val.substring(end);
+				textarea.selectionStart = textarea.selectionEnd = start + 4;
+			}
+		});
+
+		// Real-time preview: apply CSS as the user types
+		textarea.addEventListener('input', () => {
+			this.view.plugin.settings.customCss = textarea.value;
+			this.view.updateCustomCss();
+		});
+
+		const buttonContainer = contentEl.createEl('div', {
+			cls: 'pdf-modal-button-container',
+			attr: { style: 'display: flex; justify-content: flex-end; gap: 12px;' }
+		});
+
+		// Reset button (clear textarea, but do not save or close)
+		const resetBtn = buttonContainer.createEl('button', {
+			text: 'Reset',
+		});
+		resetBtn.addEventListener('click', () => {
+			textarea.value = '';
+			this.view.plugin.settings.customCss = '';
+			this.view.updateCustomCss();
+		});
+
+		// Done button (save and close)
+		const doneBtn = buttonContainer.createEl('button', {
+			cls: 'mod-cta',
+			text: 'Done',
+		});
+		doneBtn.addEventListener('click', () => {
+			this.isConfirmed = true;
+			this.view.plugin.settings.customCss = textarea.value;
+			void this.view.plugin.saveSettings();
+			this.view.updateCustomCss();
+			this.close();
+		});
+	}
+
+	onClose() {
+		const { contentEl } = this;
+		contentEl.empty();
+		
+		if (!this.isConfirmed) {
+			this.view.plugin.settings.customCss = this.originalCss;
+			this.view.updateCustomCss();
+		}
 	}
 }
 

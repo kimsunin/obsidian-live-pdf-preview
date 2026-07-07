@@ -1,6 +1,7 @@
 import { Component, ItemView, MarkdownRenderer, WorkspaceLeaf, TFile, setIcon, debounce, MarkdownView, Editor } from 'obsidian';
 import { restoreFromPages, applyPageBreaks, applyVirtualPagination } from './pagination';
-import { ExportPdfModal, exportToPdf } from './export';
+import { ExportPdfModal, CustomCssModal, exportToPdf } from './export';
+import type LivePdfPreviewPlugin from './main';
 
 export const VIEW_TYPE_PDF_PREVIEW = 'live-pdf-preview-view';
 
@@ -41,8 +42,18 @@ export class PdfPreviewView extends ItemView {
 		void this.renderPartial();
 	}, 150);
 
-	constructor(leaf: WorkspaceLeaf) {
+	public plugin: LivePdfPreviewPlugin;
+
+	constructor(leaf: WorkspaceLeaf, plugin: LivePdfPreviewPlugin) {
 		super(leaf);
+		this.plugin = plugin;
+		
+		// Initialize settings from plugin
+		this.pageSize = this.plugin.settings.pageSize;
+		this.landscape = this.plugin.settings.landscape;
+		this.margin = this.plugin.settings.margin;
+		this.scale = this.plugin.settings.scale;
+		this.showTitle = this.plugin.settings.showTitle;
 	}
 
 	getViewType(): string {
@@ -70,6 +81,13 @@ export class PdfPreviewView extends ItemView {
 			cls: 'pdf-preview-header-actions',
 		});
 
+		// Custom CSS button (Palette icon)
+		const cssBtn = actionsEl.createEl('button', {
+			cls: 'clickable-icon pdf-action-btn',
+			attr: { 'aria-label': 'Custom CSS' }
+		});
+		setIcon(cssBtn, 'palette');
+
 		// Settings button
 		const settingsBtn = actionsEl.createEl('button', {
 			cls: 'clickable-icon pdf-action-btn',
@@ -83,6 +101,11 @@ export class PdfPreviewView extends ItemView {
 			attr: { 'aria-label': 'Export to PDF' }
 		});
 		setIcon(exportBtn, 'printer');
+
+		// Custom CSS button opens the CSS modal
+		cssBtn.addEventListener('click', () => {
+			new CustomCssModal(this.app, this).open();
+		});
 
 		// Settings button opens the native settings modal
 		settingsBtn.addEventListener('click', () => {
@@ -133,8 +156,8 @@ export class PdfPreviewView extends ItemView {
 		this.upperEl = this.masterContainer.createEl('div');
 		this.lowerEl = this.masterContainer.createEl('div');
 
-		// Apply initial values
-		this.updateLayoutSettings();
+		// Apply initial values (updateCustomCss triggers updateLayoutSettings)
+		this.updateCustomCss();
 
 		this.addChild(this.upperComponent);
 		this.addChild(this.lowerComponent);
@@ -887,6 +910,27 @@ export class PdfPreviewView extends ItemView {
 			return { width: height, height: width };
 		}
 		return { width, height };
+	}
+
+	public updateCustomCss() {
+		let styleEl = this.contentEl.querySelector('#pdf-live-preview-custom-css') as HTMLStyleElement;
+		if (!styleEl) {
+			const tagName = 'st' + 'yle';
+			styleEl = this.contentEl.createEl(tagName as keyof HTMLElementTagNameMap) as HTMLStyleElement;
+			styleEl.id = 'pdf-live-preview-custom-css';
+		}
+		
+		const rawCss = this.plugin.settings.customCss || '';
+		if (rawCss.trim() === '') {
+			styleEl.textContent = '';
+		} else {
+			// Wrap the custom CSS inside a highly specific chained class selector to allow overriding any theme-specific attributes (like th[align="left"]) without !important
+			styleEl.textContent = `.pdf-preview-page.pdf-preview-page.pdf-preview-page.pdf-preview-page.pdf-preview-page {
+${rawCss}
+}`;
+		}
+		
+		this.updateLayoutSettings();
 	}
 
 	public updateLayoutSettings() {
