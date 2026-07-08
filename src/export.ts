@@ -1,4 +1,4 @@
-import { App, Modal, Notice, Setting, DropdownComponent, SliderComponent, ToggleComponent } from 'obsidian';
+import { App, Modal, Notice, Setting, DropdownComponent, SliderComponent, ToggleComponent, ColorComponent } from 'obsidian';
 import { PDFDocument } from 'pdf-lib';
 import { addOutline } from './pdf-outline';
 import type { PdfPreviewView } from './view';
@@ -286,6 +286,144 @@ export class CustomCssModal extends Modal {
 		if (!this.isConfirmed) {
 			this.view.plugin.settings.customCss = this.originalCss;
 			this.view.updateCustomCss();
+		}
+	}
+}
+
+export class QuickStyleModal extends Modal {
+	private view: PdfPreviewView;
+	private isConfirmed = false;
+	
+	private originalFontFamily!: string;
+	private originalFontSize!: number;
+	private originalTextColor!: string;
+	private originalBackgroundColor!: string;
+
+	constructor(app: App, view: PdfPreviewView) {
+		super(app);
+		this.view = view;
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.empty();
+
+		this.titleEl.setText('Quick styles');
+
+		const settings = this.view.plugin.settings;
+		this.originalFontFamily = settings.fontFamily || 'default';
+		this.originalFontSize = settings.fontSize || 16;
+		this.originalTextColor = settings.textColor || 'default';
+		this.originalBackgroundColor = settings.backgroundColor || 'default';
+
+		let fontDropdown: DropdownComponent;
+		let sizeSlider: SliderComponent;
+		let colorPicker: ColorComponent;
+
+		// 1. Font Family Setting
+		new Setting(contentEl)
+			.setName('Font family')
+			.setDesc('Choose the base font style for the PDF page.')
+			.addDropdown(dropdown => {
+				fontDropdown = dropdown;
+				dropdown
+					.addOption('default', 'Default')
+					.addOption('minimal', 'Minimal')
+					.addOption('editorial', 'Editorial')
+					.addOption('novel', 'Warm novel')
+					.addOption('technical', 'Technical')
+					.setValue(settings.fontFamily)
+					.onChange(value => {
+						this.view.plugin.settings.fontFamily = value;
+						this.view.updateGuiCss();
+					});
+			});
+
+		// 2. Font Size Setting
+		new Setting(contentEl)
+			.setName('Font size')
+			.setDesc('Adjust the base text font size (default: 16px).')
+			.addSlider(slider => {
+				sizeSlider = slider;
+				slider
+					.setLimits(12, 24, 1)
+					.setValue(settings.fontSize)
+					.setDynamicTooltip()
+					.onChange(value => {
+						this.view.plugin.settings.fontSize = value;
+						this.view.updateGuiCss();
+					});
+			});
+
+		// 3. Text Color Setting
+		new Setting(contentEl)
+			.setName('Text color')
+			.setDesc('Set the main body text color.')
+			.addExtraButton(button => {
+				button
+					.setIcon('rotate-ccw')
+					.onClick(() => {
+						this.view.plugin.settings.textColor = 'default';
+						colorPicker.setValue('#000000');
+						this.view.updateGuiCss();
+					});
+			})
+			.addColorPicker(picker => {
+				colorPicker = picker;
+				picker
+					.setValue(settings.textColor === 'default' ? '#000000' : settings.textColor)
+					.onChange(value => {
+						this.view.plugin.settings.textColor = value;
+						this.view.updateGuiCss();
+					});
+			});
+
+		// Footer buttons
+		const buttonContainer = contentEl.createEl('div', {
+			cls: 'pdf-modal-button-container',
+			attr: { style: 'margin-top: 24px; display: flex; justify-content: flex-end; gap: 12px;' }
+		});
+
+		// Reset button
+		const resetBtn = buttonContainer.createEl('button', {
+			text: 'Reset',
+		});
+		resetBtn.addEventListener('click', () => {
+			this.view.plugin.settings.fontFamily = 'default';
+			this.view.plugin.settings.fontSize = 16;
+			this.view.plugin.settings.textColor = 'default';
+			this.view.plugin.settings.backgroundColor = 'default';
+
+			// Update UI
+			fontDropdown.setValue('default');
+			sizeSlider.setValue(16);
+			colorPicker.setValue('#000000');
+
+			this.view.updateGuiCss();
+		});
+
+		// Done button
+		const doneBtn = buttonContainer.createEl('button', {
+			cls: 'mod-cta',
+			text: 'Done',
+		});
+		doneBtn.addEventListener('click', () => {
+			this.isConfirmed = true;
+			void this.view.plugin.saveSettings();
+			this.close();
+		});
+	}
+
+	onClose() {
+		const { contentEl } = this;
+		contentEl.empty();
+
+		if (!this.isConfirmed) {
+			this.view.plugin.settings.fontFamily = this.originalFontFamily;
+			this.view.plugin.settings.fontSize = this.originalFontSize;
+			this.view.plugin.settings.textColor = this.originalTextColor;
+			this.view.plugin.settings.backgroundColor = this.originalBackgroundColor;
+			this.view.updateGuiCss();
 		}
 	}
 }

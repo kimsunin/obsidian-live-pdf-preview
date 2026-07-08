@@ -8,6 +8,10 @@ export interface LivePdfPreviewSettings {
 	scale: number;
 	showTitle: boolean;
 	customCss: string;
+	fontFamily: string;
+	fontSize: number;
+	textColor: string;
+	backgroundColor: string;
 }
 
 const DEFAULT_SETTINGS: LivePdfPreviewSettings = {
@@ -17,6 +21,10 @@ const DEFAULT_SETTINGS: LivePdfPreviewSettings = {
 	scale: 100,
 	showTitle: true,
 	customCss: '',
+	fontFamily: 'default',
+	fontSize: 16,
+	textColor: 'default',
+	backgroundColor: 'default',
 };
 
 export default class LivePdfPreviewPlugin extends Plugin {

@@ -1,6 +1,6 @@
 import { Component, ItemView, MarkdownRenderer, WorkspaceLeaf, TFile, setIcon, debounce, MarkdownView, Editor } from 'obsidian';
 import { restoreFromPages, applyPageBreaks, applyVirtualPagination } from './pagination';
-import { ExportPdfModal, CustomCssModal, exportToPdf } from './export';
+import { ExportPdfModal, CustomCssModal, QuickStyleModal, exportToPdf } from './export';
 import type LivePdfPreviewPlugin from './main';
 
 export const VIEW_TYPE_PDF_PREVIEW = 'live-pdf-preview-view';
@@ -81,19 +81,26 @@ export class PdfPreviewView extends ItemView {
 			cls: 'pdf-preview-header-actions',
 		});
 
-		// Custom CSS button (Palette icon)
+		// Quick Styles button (File with T icon)
+		const quickStyleBtn = actionsEl.createEl('button', {
+			cls: 'clickable-icon pdf-action-btn',
+			attr: { 'aria-label': 'Quick styles' }
+		});
+		setIcon(quickStyleBtn, 'file-type-2');
+
+		// Custom CSS button (File with Code icon)
 		const cssBtn = actionsEl.createEl('button', {
 			cls: 'clickable-icon pdf-action-btn',
 			attr: { 'aria-label': 'Custom CSS' }
 		});
-		setIcon(cssBtn, 'palette');
+		setIcon(cssBtn, 'file-code');
 
-		// Settings button
+		// Settings button (File with Gear icon)
 		const settingsBtn = actionsEl.createEl('button', {
 			cls: 'clickable-icon pdf-action-btn',
 			attr: { 'aria-label': 'Page settings' }
 		});
-		setIcon(settingsBtn, 'settings');
+		setIcon(settingsBtn, 'file-cog');
 
 		// Export PDF button
 		const exportBtn = actionsEl.createEl('button', {
@@ -101,6 +108,11 @@ export class PdfPreviewView extends ItemView {
 			attr: { 'aria-label': 'Export to PDF' }
 		});
 		setIcon(exportBtn, 'printer');
+
+		// Quick Styles button opens the quick styles modal
+		quickStyleBtn.addEventListener('click', () => {
+			new QuickStyleModal(this.app, this).open();
+		});
 
 		// Custom CSS button opens the CSS modal
 		cssBtn.addEventListener('click', () => {
@@ -156,7 +168,8 @@ export class PdfPreviewView extends ItemView {
 		this.upperEl = this.masterContainer.createEl('div');
 		this.lowerEl = this.masterContainer.createEl('div');
 
-		// Apply initial values (updateCustomCss triggers updateLayoutSettings)
+		// Apply initial values
+		this.updateGuiCss();
 		this.updateCustomCss();
 
 		this.addChild(this.upperComponent);
@@ -912,6 +925,55 @@ export class PdfPreviewView extends ItemView {
 		return { width, height };
 	}
 
+	public updateGuiCss() {
+		let styleEl = this.contentEl.querySelector('#pdf-live-preview-gui-css') as HTMLStyleElement;
+		if (!styleEl) {
+			const tagName = 'st' + 'yle';
+			styleEl = this.contentEl.createEl(tagName as keyof HTMLElementTagNameMap) as HTMLStyleElement;
+			styleEl.id = 'pdf-live-preview-gui-css';
+			
+			// Always insert before custom CSS tag if it exists to preserve ordering
+			const customCssEl = this.contentEl.querySelector('#pdf-live-preview-custom-css');
+			if (customCssEl) {
+				this.contentEl.insertBefore(styleEl, customCssEl);
+			}
+		}
+		
+		const settings = this.plugin.settings;
+		let cssText = '';
+		
+		// 1. Font Family
+		let fontRule = '';
+		if (settings.fontFamily && settings.fontFamily !== 'default') {
+			let family = '';
+			if (settings.fontFamily === 'minimal') {
+				family = '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+			} else if (settings.fontFamily === 'editorial') {
+				family = '"Latin Modern Roman", "Times New Roman", Georgia, serif';
+			} else if (settings.fontFamily === 'novel') {
+				family = '"Baskerville", "Garamond", serif';
+			} else if (settings.fontFamily === 'technical') {
+				family = 'var(--font-monospace), "Courier New", monospace';
+			}
+			if (family) {
+				fontRule = `font-family: ${family};\n\t--font-text: ${family};`;
+			}
+		}
+		
+		// 2. Text Color
+		let colorRule = '';
+		if (settings.textColor && settings.textColor !== 'default') {
+			colorRule = `color: ${settings.textColor};\n\t--text-normal: ${settings.textColor};`;
+		}
+		
+		if (fontRule || colorRule) {
+			cssText += `.pdf-preview-page {\n\t${fontRule}\n\t${colorRule}\n}\n`;
+		}
+		
+		styleEl.textContent = cssText;
+		this.updateLayoutSettings();
+	}
+
 	public updateCustomCss() {
 		let styleEl = this.contentEl.querySelector('#pdf-live-preview-custom-css') as HTMLStyleElement;
 		if (!styleEl) {
@@ -940,8 +1002,9 @@ ${rawCss}
 			this.previewContainer.style.setProperty('--pdf-page-width', `${dims.width}mm`);
 			this.previewContainer.style.setProperty('--pdf-page-height', `${dims.height}mm`);
 			
-			// Map scale to font size: 100% scale corresponds to base 16px font size
-			const calculatedFontSize = 16 * (this.scale / 100);
+			// Map scale to font size: 100% scale corresponds to base font size configured in GUI settings
+			const baseSize = this.plugin.settings.fontSize || 16;
+			const calculatedFontSize = baseSize * (this.scale / 100);
 			this.previewContainer.style.setProperty('--pdf-base-font-size', `${calculatedFontSize}px`);
 			this.previewContainer.style.setProperty('--pdf-page-margin', this.margin);
 		}
