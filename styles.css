@@ -151,17 +151,29 @@
 }
 
 .pdf-preview-page h1 {
+	font-size: calc(var(--pdf-heading-base-font-size, var(--pdf-base-font-size, 16px)) * 2) !important;
 	margin-top: 0.5em;
 	margin-bottom: 0.5em;
 	padding-bottom: 0.3em;
 }
 .pdf-preview-page h2 {
+	font-size: calc(var(--pdf-heading-base-font-size, var(--pdf-base-font-size, 16px)) * 1.6) !important;
 	margin-top: 0.8em;
 	margin-bottom: 0.4em;
 }
 .pdf-preview-page h3 {
+	font-size: calc(var(--pdf-heading-base-font-size, var(--pdf-base-font-size, 16px)) * 1.25) !important;
 	margin-top: 0.8em;
 	margin-bottom: 0.4em;
+}
+.pdf-preview-page h4 {
+	font-size: calc(var(--pdf-heading-base-font-size, var(--pdf-base-font-size, 16px)) * 1.1) !important;
+}
+.pdf-preview-page h5 {
+	font-size: calc(var(--pdf-heading-base-font-size, var(--pdf-base-font-size, 16px)) * 1.0) !important;
+}
+.pdf-preview-page h6 {
+	font-size: calc(var(--pdf-heading-base-font-size, var(--pdf-base-font-size, 16px)) * 0.85) !important;
 }
 .pdf-preview-page p {
 	margin-top: 0;

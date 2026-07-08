@@ -1006,6 +1006,10 @@ ${rawCss}
 			const baseSize = this.plugin.settings.fontSize || 16;
 			const calculatedFontSize = baseSize * (this.scale / 100);
 			this.previewContainer.style.setProperty('--pdf-base-font-size', `${calculatedFontSize}px`);
+			
+			// Map scale to heading base font size: only scales with downscale percent, NOT with custom font size
+			const calculatedHeadingSize = 16 * (this.scale / 100);
+			this.previewContainer.style.setProperty('--pdf-heading-base-font-size', `${calculatedHeadingSize}px`);
 			this.previewContainer.style.setProperty('--pdf-page-margin', this.margin);
 		}
 		
