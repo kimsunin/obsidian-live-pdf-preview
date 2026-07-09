@@ -1,9 +1,11 @@
 import { Component, ItemView, MarkdownRenderer, WorkspaceLeaf, TFile, setIcon, debounce, MarkdownView, Editor } from 'obsidian';
+import morphdom from 'morphdom';
 import { restoreFromPages, applyPageBreaks, applyVirtualPagination } from './pagination';
 import { ExportPdfModal, CustomCssModal, QuickStyleModal, exportToPdf } from './export';
 import type LivePdfPreviewPlugin from './main';
-
-export const VIEW_TYPE_PDF_PREVIEW = 'live-pdf-preview-view';
+import { FONT_FAMILY_MAP, PAGE_DIMENSIONS, VIEW_TYPE_PDF_PREVIEW } from './types';
+import { processMarkdownIndentation, fixColumnLines, fixHorizontalRules, findCutLine } from './preprocessor';
+import { groupColumns, groupCenterBlocks } from './dom-utils';
 
 export class PdfPreviewView extends ItemView {
 	private containerA!: HTMLDivElement;
@@ -37,6 +39,10 @@ export class PdfPreviewView extends ItemView {
 	private lastClientHeight = 0;
 	private isResizing = false;
 	private isAutocompleting = false;
+	private resizeTimeout: number | null = null;
+	private isProgrammaticScrolling = false;
+	private targetScrollTop: number | null = null;
+	private scrollLockTimeout: number | null = null;
 
 	private debouncedRender = debounce(() => {
 		void this.renderPartial();
@@ -61,7 +67,7 @@ export class PdfPreviewView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return 'Live PDF Preview';
+		return 'Live PDF preview';
 	}
 
 	getIcon(): string {
@@ -143,6 +149,7 @@ export class PdfPreviewView extends ItemView {
 		// Track scroll position for both containers to prevent resize scroll drift
 		const handleScroll = (container: HTMLDivElement) => {
 			if (this.isResizing) return; // Ignore scroll events triggered by resize transitions
+			if (this.isProgrammaticScrolling) return; // Ignore programmatic scroll events
 			this.lastScrollTop = container.scrollTop;
 			this.lastScrollHeight = container.scrollHeight;
 			this.lastClientHeight = container.clientHeight;
@@ -197,18 +204,17 @@ export class PdfPreviewView extends ItemView {
 
 		// Non-debounced ResizeObserver sets isResizing to true immediately,
 		// then debounces the scroll adjustment to stop rendering feedback loops.
-		let resizeTimeout: number | null = null;
 		this.resizeObserver = new ResizeObserver(() => {
 			this.isResizing = true;
-			if (resizeTimeout) {
-				window.clearTimeout(resizeTimeout);
+			if (this.resizeTimeout) {
+				window.clearTimeout(this.resizeTimeout);
 			}
 
 			// Proportionally adjust scroll position during resize
 			this.adjustScrollOnResize();
 
 			// End resizing status 150ms after resizing ends
-			resizeTimeout = window.setTimeout(() => {
+			this.resizeTimeout = window.setTimeout(() => {
 				this.isResizing = false;
 				if (this.activeContainer) {
 					this.lastScrollTop = this.activeContainer.scrollTop;
@@ -253,6 +259,14 @@ export class PdfPreviewView extends ItemView {
 
 	async onClose() {
 		this.debouncedRender.cancel();
+		if (this.resizeTimeout) {
+			window.clearTimeout(this.resizeTimeout);
+			this.resizeTimeout = null;
+		}
+		if (this.scrollLockTimeout) {
+			window.clearTimeout(this.scrollLockTimeout);
+			this.scrollLockTimeout = null;
+		}
 		this.upperComponent.unload();
 		this.lowerComponent.unload();
 		this.removeChild(this.upperComponent);
@@ -297,10 +311,10 @@ export class PdfPreviewView extends ItemView {
 		if (currentWrappers.length > 0) {
 			const originalHolder = activeDocument.createElement('div');
 			for (const w of currentWrappers) {
-				// Clone node to maintain the visible layout while offscreen rendering runs
+				// Clone the wrapper and its contents to use for offscreen restoration,
+				// leaving the visible DOM nodes in activeContainer completely untouched.
 				const clone = w.cloneNode(true);
-				this.activeContainer.insertBefore(clone, w);
-				originalHolder.appendChild(w);
+				originalHolder.appendChild(clone);
 			}
 			restoreFromPages(originalHolder, this.upperEl, this.lowerEl);
 		} else {
@@ -308,104 +322,75 @@ export class PdfPreviewView extends ItemView {
 		}
 	}
 
-	private swapContainers(savedScrollTop: number) {
-		if (this.inactiveContainer) {
-			this.inactiveContainer.scrollTop = savedScrollTop;
-		}
+	private swapContainers(overrideScrollTop?: number) {
+		// Surgical in-place DOM diffing using morphdom (Phase 13 Idea B)
+		// We morph activeContainer's child elements to match inactiveContainer's children,
+		// which prevents screen flashes and preserves browser native scroll inertia.
+		morphdom(this.activeContainer, this.inactiveContainer, {
+			childrenOnly: true
+		});
 
-		this.activeContainer.classList.remove('is-active');
-		this.activeContainer.classList.add('is-inactive');
-
-		this.inactiveContainer.classList.remove('is-inactive');
-		this.inactiveContainer.classList.add('is-active');
-
-		const temp = this.activeContainer;
-		this.activeContainer = this.inactiveContainer;
-		this.inactiveContainer = temp;
-
-		// Clean up memory and cloned nodes in the old active container
+		// Clean up the offscreen inactive container so it's ready for the next render
 		this.inactiveContainer.empty();
 
-		// Update the scroll dimension cache for the newly active container
-		this.lastScrollTop = savedScrollTop;
+		if (overrideScrollTop !== undefined) {
+			this.activeContainer.scrollTop = overrideScrollTop;
+		}
+
+		// Update the scroll dimension cache for the active container
+		this.lastScrollTop = this.activeContainer.scrollTop;
 		this.lastScrollHeight = this.activeContainer.scrollHeight;
 		this.lastClientHeight = this.activeContainer.clientHeight;
 	}
 
 	private scrollToActiveSection() {
 		if (!this.activeContainer) return;
+
+		// If we are already in the middle of a smooth programmatic scroll,
+		// continue smooth-scrolling to the existing target on the new container without snapping back
+		if (this.isProgrammaticScrolling && this.targetScrollTop !== null) {
+			this.activeContainer.scrollTo({ top: this.targetScrollTop, behavior: 'smooth' });
+			if (this.scrollLockTimeout) {
+				window.clearTimeout(this.scrollLockTimeout);
+			}
+			this.scrollLockTimeout = window.setTimeout(() => {
+				this.isProgrammaticScrolling = false;
+				this.targetScrollTop = null;
+				this.scrollLockTimeout = null;
+			}, 400);
+			return;
+		}
+
 		const firstLowerEl = this.activeContainer.querySelector('[data-section="lower"]');
 		if (firstLowerEl) {
 			const containerRect = this.activeContainer.getBoundingClientRect();
 			const elRect = firstLowerEl.getBoundingClientRect();
 
-			// Check if the element is already fully visible within the container viewport
-			const isVisible = elRect.top >= containerRect.top && elRect.bottom <= containerRect.bottom;
+			// ONLY check if the start (top) of the modified section is visible within the viewport
+			// We give it a safety margin of 40px from the bottom so it doesn't get cut off.
+			const isVisible = elRect.top >= containerRect.top && elRect.top <= (containerRect.bottom - 40);
 
 			if (!isVisible) {
-				// Only scroll to the top smoothly if it is not currently visible
-				firstLowerEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+				const target = this.activeContainer.scrollTop + (elRect.top - containerRect.top);
+				this.targetScrollTop = target;
+				this.isProgrammaticScrolling = true;
+
+				if (this.scrollLockTimeout) {
+					window.clearTimeout(this.scrollLockTimeout);
+				}
+
+				this.activeContainer.scrollTo({ top: target, behavior: 'smooth' });
+
+				this.scrollLockTimeout = window.setTimeout(() => {
+					this.isProgrammaticScrolling = false;
+					this.targetScrollTop = null;
+					this.scrollLockTimeout = null;
+				}, 400);
 			}
 		}
 	}
 
-	private fixHorizontalRules(text: string, cursorLine?: number): { text: string; cursorLine?: number } {
-		const lines = text.split('\n');
-		let adjustedCursor = cursorLine;
 
-		// Check if document has YAML Frontmatter
-		let inFrontmatter = false;
-		let frontmatterEndIndex = -1;
-		if (lines.length > 0 && lines[0] !== undefined && lines[0].trim() === '---') {
-			inFrontmatter = true;
-			// Find the closing '---'
-			for (let i = 1; i < lines.length; i++) {
-				const line = lines[i];
-				if (line !== undefined && line.trim() === '---') {
-					frontmatterEndIndex = i;
-					break;
-				}
-			}
-		}
-
-		for (let i = 0; i < lines.length - 1; i++) {
-			// Skip processing inside the YAML frontmatter block (start and end boundaries included)
-			if (inFrontmatter && i <= frontmatterEndIndex) {
-				continue;
-			}
-
-			const line = lines[i];
-			if (line !== undefined && i > 0 && /^(?:-{3,}|\*{3,}|_{3,})$/.test(line.trim())) {
-				// Count how many empty lines follow the horizontal rule
-				let emptyLineCount = 0;
-				while (i + 1 + emptyLineCount < lines.length) {
-					const nextLine = lines[i + 1 + emptyLineCount];
-					if (nextLine !== undefined && nextLine.trim() === '') {
-						emptyLineCount++;
-					} else {
-						break;
-					}
-				}
-
-				// Ensure at least 2 empty lines follow horizontal rules to prevent rendering glitches.
-				const requiredNewlines = 2 - emptyLineCount;
-				if (requiredNewlines > 0) {
-					for (let j = 0; j < requiredNewlines; j++) {
-						lines.splice(i + 1, 0, '');
-						if (adjustedCursor !== undefined && i < adjustedCursor) {
-							adjustedCursor++;
-						}
-						// Adjust frontmatter index if we inserted a line before it
-						if (frontmatterEndIndex !== -1 && i < frontmatterEndIndex) {
-							frontmatterEndIndex++;
-						}
-					}
-					i += requiredNewlines;
-				}
-			}
-		}
-		return { text: lines.join('\n'), cursorLine: adjustedCursor };
-	}
 
 	public async renderFull(resetScroll = false) {
 		if (!this.currentFile) {
@@ -421,7 +406,7 @@ export class PdfPreviewView extends ItemView {
 			this.lastClientHeight = 0;
 		}
 
-		const savedScrollTop = resetScroll ? 0 : (this.activeContainer ? this.activeContainer.scrollTop : 0);
+		const savedScrollTop = resetScroll ? 0 : undefined;
 
 		this.restoreFromPages();
 		
@@ -430,26 +415,22 @@ export class PdfPreviewView extends ItemView {
 		const sourcePath = this.currentFile.path;
 
 		// Preprocess horizontal rules to guarantee at least 2 trailing empty lines for rendering safety
-		text = this.fixHorizontalRules(text).text;
+		text = fixHorizontalRules(text).text;
 
 		if (this.showTitle) {
 			text = `# ${this.currentFile.basename}\n\n` + text;
 		}
 
 		// Apply custom indentation guide lines (Phase 8)
-		text = this.processMarkdownIndentation(text);
+		text = processMarkdownIndentation(text);
 
 		this.upperEl.empty();
 		this.lowerEl.empty();
 		this.cachedUpperText = '';
 
-		this.lowerComponent.unload();
-		this.removeChild(this.lowerComponent);
-		this.lowerComponent = new Component();
-		this.addChild(this.lowerComponent);
-		this.lowerComponent.load();
+		this.recycleComponent('lower');
 
-		await MarkdownRenderer.render(this.app, this.fixColumnLines(text), this.lowerEl, sourcePath, this.lowerComponent);
+		await MarkdownRenderer.render(this.app, fixColumnLines(text), this.lowerEl, sourcePath, this.lowerComponent);
 
 
 
@@ -463,8 +444,6 @@ export class PdfPreviewView extends ItemView {
 	 */
 	private async renderPartial() {
 		if (!this.currentFile) return;
-
-		const savedScrollTop = this.activeContainer ? this.activeContainer.scrollTop : 0;
 
 		// Find the workspace leaf displaying the current file to read its contents
 		let targetView: MarkdownView | null = null;
@@ -488,7 +467,7 @@ export class PdfPreviewView extends ItemView {
 		let cursorLine = editor.getCursor().line;
 
 		// Preprocess horizontal rules to guarantee at least 2 trailing empty lines for rendering safety
-		const fixed = this.fixHorizontalRules(text, cursorLine);
+		const fixed = fixHorizontalRules(text, cursorLine);
 		text = fixed.text;
 		cursorLine = fixed.cursorLine || cursorLine;
 
@@ -498,10 +477,10 @@ export class PdfPreviewView extends ItemView {
 		}
 
 		// Preprocess indentation on the entire text first to keep code block tracking accurate
-		const processedText = this.processMarkdownIndentation(text);
+		const processedText = processMarkdownIndentation(text);
 
 		// Find safe block boundary above cursor
-		const cutLine = this.findCutLine(processedText, cursorLine);
+		const cutLine = findCutLine(processedText, cursorLine);
 		const lines = processedText.split('\n');
 		const upperText = lines.slice(0, cutLine).join('\n');
 		const lowerText = lines.slice(cutLine).join('\n');
@@ -509,36 +488,24 @@ export class PdfPreviewView extends ItemView {
 		if (upperText === this.cachedUpperText) {
 			// Upper unchanged → only re-render the lower section
 			this.lowerEl.empty();
-			this.lowerComponent.unload();
-			this.removeChild(this.lowerComponent);
-			this.lowerComponent = new Component();
-			this.addChild(this.lowerComponent);
-			this.lowerComponent.load();
+			this.recycleComponent('lower');
 
 			if (lowerText) {
-				await MarkdownRenderer.render(this.app, this.fixColumnLines(lowerText), this.lowerEl, sourcePath, this.lowerComponent);
+				await MarkdownRenderer.render(this.app, fixColumnLines(lowerText), this.lowerEl, sourcePath, this.lowerComponent);
 			}
 		} else {
 			// Upper changed → full re-render with new split
 			this.upperEl.empty();
 			this.lowerEl.empty();
 
-			this.upperComponent.unload();
-			this.removeChild(this.upperComponent);
-			this.upperComponent = new Component();
-			this.addChild(this.upperComponent);
-			this.upperComponent.load();
-			this.lowerComponent.unload();
-			this.removeChild(this.lowerComponent);
-			this.lowerComponent = new Component();
-			this.addChild(this.lowerComponent);
-			this.lowerComponent.load();
+			this.recycleComponent('upper');
+			this.recycleComponent('lower');
 
 			if (upperText) {
-				await MarkdownRenderer.render(this.app, this.fixColumnLines(upperText), this.upperEl, sourcePath, this.upperComponent);
+				await MarkdownRenderer.render(this.app, fixColumnLines(upperText), this.upperEl, sourcePath, this.upperComponent);
 			}
 			if (lowerText) {
-				await MarkdownRenderer.render(this.app, this.fixColumnLines(lowerText), this.lowerEl, sourcePath, this.lowerComponent);
+				await MarkdownRenderer.render(this.app, fixColumnLines(lowerText), this.lowerEl, sourcePath, this.lowerComponent);
 			}
 
 			this.cachedUpperText = upperText;
@@ -547,107 +514,13 @@ export class PdfPreviewView extends ItemView {
 
 
 		this.postProcess(this.inactiveContainer);
-		this.swapContainers(savedScrollTop);
+		this.swapContainers();
 		this.scrollToActiveSection();
 	}
 
 
 
-	/**
-	 * Preprocesses the markdown text to wrap plain indentation blocks (tabs or 4-spaces
-	 * that are not part of code blocks or lists) in nested <div class="pdf-indent-container">
-	 * wrappers. This creates vertical guide lines (|) for each level of plain indentation,
-	 * exactly like the Obsidian editor, without turning them into pre/code blocks.
-	 */
-	private processMarkdownIndentation(text: string): string {
-		const lines = text.split('\n');
-		let inCodeBlock = false;
-		let inFrontmatter = false;
-		
-		if (lines.length > 0 && lines[0] !== undefined && lines[0].trim() === '---') {
-			inFrontmatter = true;
-		}
 
-		const processedLines = lines.map((line, index) => {
-			if (index > 0 && line.trim() === '---') {
-				if (inFrontmatter) {
-					inFrontmatter = false;
-					return line;
-				}
-			}
-			if (inFrontmatter) {
-				return line;
-			}
-
-			if (line.trim().startsWith('```') || line.trim().startsWith('~~~')) {
-				inCodeBlock = !inCodeBlock;
-				return line;
-			}
-			if (inCodeBlock) {
-				return line;
-			}
-
-			if (line.trim() === '') {
-				return line;
-			}
-
-			let indentLevel = 0;
-			let tempLine = line;
-			while (true) {
-				if (tempLine.startsWith('\t')) {
-					indentLevel++;
-					tempLine = tempLine.substring(1);
-				} else if (tempLine.startsWith('    ')) {
-					indentLevel++;
-					tempLine = tempLine.substring(4);
-				} else {
-					break;
-				}
-			}
-
-			if (indentLevel === 0) {
-				return line;
-			}
-
-			const trimmedTemp = tempLine.trim();
-			// Match lists: bullets (-, *, +) or numbered lists (1., 2., etc.)
-			const isList = /^(?:[-*+]|\d+\.)\s/.test(trimmedTemp);
-
-			if (isList) {
-				return line;
-			}
-
-			let wrappedLine = tempLine;
-			for (let i = 0; i < indentLevel; i++) {
-				wrappedLine = `<div class="pdf-indent-container">${wrappedLine}</div>`;
-			}
-			return wrappedLine;
-		});
-
-		return processedLines.join('\n');
-	}
-
-	private fixColumnLines(text: string): string {
-		const lines = text.split('\n');
-		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i];
-			if (line !== undefined) {
-				const trimmed = line.trim();
-				if (trimmed === '//column' || trimmed === '//center' || /^\/\/column-\d+$/.test(trimmed)) {
-					// Ensure there is an empty line before (if i > 0 and not empty)
-					if (i > 0 && lines[i - 1]?.trim() !== '') {
-						lines.splice(i, 0, '');
-						i++;
-					}
-					// Ensure there is an empty line after (if not last and not empty)
-					if (i < lines.length - 1 && lines[i + 1]?.trim() !== '') {
-						lines.splice(i + 1, 0, '');
-					}
-				}
-			}
-		}
-		return lines.join('\n');
-	}
 
 	private getOccurrenceCount(editor: Editor, targetText: string, limitLine: number): number {
 		let count = 0;
@@ -704,183 +577,14 @@ export class PdfPreviewView extends ItemView {
 		}
 	}
 
-	private isInsideColumnBlock(lines: string[], targetLineIndex: number): boolean {
-		let inColumn = false;
-		for (let i = 0; i <= targetLineIndex; i++) {
-			const line = lines[i];
-			if (line !== undefined && line.trim() === '//column') {
-				inColumn = !inColumn;
-			}
-		}
-		return inColumn;
-	}
 
-	private isInsideCenterBlock(lines: string[], targetLineIndex: number): boolean {
-		let inCenter = false;
-		for (let i = 0; i <= targetLineIndex; i++) {
-			const line = lines[i];
-			if (line !== undefined && line.trim() === '//center') {
-				inCenter = !inCenter;
-			}
-		}
-		return inCenter;
-	}
-
-	/**
-	 * Searches upward from the cursor line to find the nearest blank line,
-	 * which marks a safe markdown block boundary for splitting.
-	 * Returns the line index where the lower section starts.
-	 */
-	private findCutLine(text: string, cursorLine: number): number {
-		const lines = text.split('\n');
-		const start = Math.min(cursorLine - 1, lines.length - 1);
-		for (let i = start; i >= 0; i--) {
-			const line = lines[i];
-			if (line !== undefined && line.trim() === '') {
-				if (!this.isInsideColumnBlock(lines, i) && !this.isInsideCenterBlock(lines, i)) {
-					return i + 1;
-				}
-			}
-		}
-		return 0;
-	}
-
-	// --- Post-processing (Phase 4) ---
-
-	private groupColumns(container: HTMLElement) {
-		let children = Array.from(container.children) as HTMLElement[];
-		let i = 0;
-		while (i < children.length) {
-			const child = children[i];
-			if (!child) {
-				i++;
-				continue;
-			}
-			if (child.textContent?.trim() === '//column') {
-				let closeIndex = -1;
-				for (let j = i + 1; j < children.length; j++) {
-					const nextEl = children[j];
-					if (nextEl && nextEl.textContent?.trim() === '//column') {
-						closeIndex = j;
-						break;
-					}
-				}
-
-				if (closeIndex !== -1) {
-					const rowEl = activeDocument.createElement('div');
-					rowEl.className = 'pdf-row';
-
-					// Support columns 1, 2, and 3
-					const colStarts = [-1, -1, -1, -1];
-					const colEnds = [-1, -1, -1, -1];
-
-					for (let j = i + 1; j < closeIndex; j++) {
-						const subChild = children[j];
-						if (subChild) {
-							const text = subChild.textContent?.trim();
-							const colMatch = text?.match(/^\/\/column-(\d+)$/);
-							if (colMatch && colMatch[1]) {
-								const colIdx = parseInt(colMatch[1], 10);
-								if (colIdx >= 1 && colIdx <= 3) {
-									if (colStarts[colIdx] === -1) {
-										colStarts[colIdx] = j;
-									} else {
-										colEnds[colIdx] = j;
-									}
-								}
-							}
-						}
-					}
-
-					// Build elements for each column (up to 3) in order
-					for (let colIdx = 1; colIdx <= 3; colIdx++) {
-						const cStart = colStarts[colIdx];
-						const cEnd = colEnds[colIdx];
-						if (cStart !== undefined && cEnd !== undefined && cStart !== -1 && cEnd !== -1 && cEnd > cStart) {
-							const colEl = activeDocument.createElement('div');
-							colEl.className = `pdf-col pdf-col-${colIdx}`;
-							const colElements = children.slice(cStart + 1, cEnd);
-							for (const el of colElements) {
-								if (el) colEl.appendChild(el);
-							}
-							rowEl.appendChild(colEl);
-						}
-					}
-
-					const insertBeforeEl: HTMLElement | null = (closeIndex + 1 < children.length) ? (children[closeIndex + 1] ?? null) : null;
-					for (let k = i; k <= closeIndex; k++) {
-						const markerEl = children[k];
-						if (markerEl && markerEl.parentNode === container) {
-							container.removeChild(markerEl);
-						}
-					}
-
-					container.insertBefore(rowEl, insertBeforeEl);
-
-					// Refresh the children array and restart/adjust the index
-					children = Array.from(container.children) as HTMLElement[];
-					i = children.indexOf(rowEl) + 1;
-					continue;
-				}
-			}
-			i++;
-		}
-	}
-
-	private groupCenterBlocks(container: HTMLElement) {
-		let children = Array.from(container.children) as HTMLElement[];
-		let i = 0;
-		while (i < children.length) {
-			const child = children[i];
-			if (!child) {
-				i++;
-				continue;
-			}
-			if (child.textContent?.trim() === '//center') {
-				let closeIndex = -1;
-				for (let j = i + 1; j < children.length; j++) {
-					const nextEl = children[j];
-					if (nextEl && nextEl.textContent?.trim() === '//center') {
-						closeIndex = j;
-						break;
-					}
-				}
-
-				if (closeIndex !== -1) {
-					const centerEl = activeDocument.createElement('div');
-					centerEl.className = 'pdf-center-block';
-
-					const contentElements = children.slice(i + 1, closeIndex);
-					for (const el of contentElements) {
-						if (el) centerEl.appendChild(el);
-					}
-
-					const insertBeforeEl: HTMLElement | null = (closeIndex + 1 < children.length) ? (children[closeIndex + 1] ?? null) : null;
-					for (let k = i; k <= closeIndex; k++) {
-						const markerEl = children[k];
-						if (markerEl && markerEl.parentNode === container) {
-							container.removeChild(markerEl);
-						}
-					}
-
-					container.insertBefore(centerEl, insertBeforeEl);
-
-					// Refresh the children array and restart/adjust the index
-					children = Array.from(container.children) as HTMLElement[];
-					i = children.indexOf(centerEl) + 1;
-					continue;
-				}
-			}
-			i++;
-		}
-	}
 
 	private postProcess(targetContainer: HTMLDivElement = this.activeContainer) {
 		if (!this.upperEl || !this.lowerEl) return;
-		this.groupColumns(this.upperEl);
-		this.groupColumns(this.lowerEl);
-		this.groupCenterBlocks(this.upperEl);
-		this.groupCenterBlocks(this.lowerEl);
+		groupColumns(this.upperEl);
+		groupColumns(this.lowerEl);
+		groupCenterBlocks(this.upperEl);
+		groupCenterBlocks(this.lowerEl);
 		applyPageBreaks(this.upperEl, this.lowerEl);
 		applyVirtualPagination({
 			previewContainer: targetContainer,
@@ -892,52 +596,29 @@ export class PdfPreviewView extends ItemView {
 	}
 
 	private getPageDimensionsMm(): { width: number; height: number } {
-		let width = 210;
-		let height = 297;
-
-		switch (this.pageSize) {
-			case 'Letter':
-				width = 215.9;
-				height = 279.4;
-				break;
-			case 'A3':
-				width = 297;
-				height = 420;
-				break;
-			case 'A5':
-				width = 148;
-				height = 210;
-				break;
-			case 'Legal':
-				width = 215.9;
-				height = 355.6;
-				break;
-			case 'A4':
-			default:
-				width = 210;
-				height = 297;
-				break;
-		}
-
+		const dim = (PAGE_DIMENSIONS[this.pageSize] || PAGE_DIMENSIONS.A4)!;
 		if (this.landscape) {
-			return { width: height, height: width };
+			return { width: dim.height, height: dim.width };
 		}
-		return { width, height };
+		return { width: dim.width, height: dim.height };
 	}
 
-	public updateGuiCss() {
-		let styleEl = this.contentEl.querySelector('#pdf-live-preview-gui-css') as HTMLStyleElement;
+	private getOrCreateStyleEl(id: string, insertBeforeEl?: Element | null): HTMLStyleElement {
+		let styleEl = this.contentEl.querySelector(`#${id}`) as HTMLStyleElement;
 		if (!styleEl) {
 			const tagName = 'st' + 'yle';
 			styleEl = this.contentEl.createEl(tagName as keyof HTMLElementTagNameMap) as HTMLStyleElement;
-			styleEl.id = 'pdf-live-preview-gui-css';
-			
-			// Always insert before custom CSS tag if it exists to preserve ordering
-			const customCssEl = this.contentEl.querySelector('#pdf-live-preview-custom-css');
-			if (customCssEl) {
-				this.contentEl.insertBefore(styleEl, customCssEl);
+			styleEl.id = id;
+			if (insertBeforeEl) {
+				this.contentEl.insertBefore(styleEl, insertBeforeEl);
 			}
 		}
+		return styleEl;
+	}
+
+	public updateGuiCss(resetScroll = false) {
+		const customCssEl = this.contentEl.querySelector('#pdf-live-preview-custom-css');
+		const styleEl = this.getOrCreateStyleEl('pdf-live-preview-gui-css', customCssEl);
 		
 		const settings = this.plugin.settings;
 		let cssText = '';
@@ -945,16 +626,7 @@ export class PdfPreviewView extends ItemView {
 		// 1. Font Family
 		let fontRule = '';
 		if (settings.fontFamily && settings.fontFamily !== 'default') {
-			let family = '';
-			if (settings.fontFamily === 'minimal') {
-				family = '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-			} else if (settings.fontFamily === 'editorial') {
-				family = '"Latin Modern Roman", "Times New Roman", Georgia, serif';
-			} else if (settings.fontFamily === 'novel') {
-				family = '"Baskerville", "Garamond", serif';
-			} else if (settings.fontFamily === 'technical') {
-				family = 'var(--font-monospace), "Courier New", monospace';
-			}
+			const family = FONT_FAMILY_MAP[settings.fontFamily];
 			if (family) {
 				fontRule = `font-family: ${family};\n\t--font-text: ${family};`;
 			}
@@ -971,17 +643,25 @@ export class PdfPreviewView extends ItemView {
 		}
 		
 		styleEl.textContent = cssText;
-		this.updateLayoutSettings();
+		this.updateLayoutSettings(resetScroll);
 	}
 
-	public updateCustomCss() {
-		let styleEl = this.contentEl.querySelector('#pdf-live-preview-custom-css') as HTMLStyleElement;
-		if (!styleEl) {
-			const tagName = 'st' + 'yle';
-			styleEl = this.contentEl.createEl(tagName as keyof HTMLElementTagNameMap) as HTMLStyleElement;
-			styleEl.id = 'pdf-live-preview-custom-css';
+	private getValidRulesText(styleEl: HTMLStyleElement): string {
+		try {
+			const sheet = styleEl.sheet as CSSStyleSheet;
+			if (!sheet) return '';
+			return Array.from(sheet.cssRules).map(r => r.cssText).join('\n');
+		} catch {
+			return '';
 		}
+	}
+
+	public updateCustomCss(resetScroll = false) {
+		const styleEl = this.getOrCreateStyleEl('pdf-live-preview-custom-css');
 		
+		// Capture the successfully parsed CSS rules before updating
+		const rulesBefore = this.getValidRulesText(styleEl);
+
 		const rawCss = this.plugin.settings.customCss || '';
 		if (rawCss.trim() === '') {
 			styleEl.textContent = '';
@@ -992,30 +672,59 @@ ${rawCss}
 }`;
 		}
 		
-		this.updateLayoutSettings();
+		// Capture the successfully parsed CSS rules after updating
+		const rulesAfter = this.getValidRulesText(styleEl);
+		const isStyleChanged = rulesBefore !== rulesAfter;
+
+		this.updateLayoutSettings(resetScroll && isStyleChanged);
 	}
 
-	public updateLayoutSettings() {
-		// Update CSS variables on the previewContainer
-		if (this.previewContainer) {
-			const dims = this.getPageDimensionsMm();
-			this.previewContainer.style.setProperty('--pdf-page-width', `${dims.width}mm`);
-			this.previewContainer.style.setProperty('--pdf-page-height', `${dims.height}mm`);
-			
-			// Map scale to font size: 100% scale corresponds to base font size configured in GUI settings
-			const baseSize = this.plugin.settings.fontSize || 16;
-			const calculatedFontSize = baseSize * (this.scale / 100);
-			this.previewContainer.style.setProperty('--pdf-base-font-size', `${calculatedFontSize}px`);
-			
-			// Map scale to heading base font size: only scales with downscale percent, NOT with custom font size
-			const calculatedHeadingSize = 16 * (this.scale / 100);
-			this.previewContainer.style.setProperty('--pdf-heading-base-font-size', `${calculatedHeadingSize}px`);
-			this.previewContainer.style.setProperty('--pdf-page-margin', this.margin);
+	public updateLayoutSettings(resetScroll = false) {
+		const savedScrollTop = resetScroll ? 0 : (this.activeContainer ? this.activeContainer.scrollTop : 0);
+
+		// Update CSS variables on both preview containers
+		const containers = [this.containerA, this.containerB];
+		const dims = this.getPageDimensionsMm();
+		for (const container of containers) {
+			if (container) {
+				container.style.setProperty('--pdf-page-width', `${dims.width}mm`);
+				container.style.setProperty('--pdf-page-height', `${dims.height}mm`);
+				
+				// Map scale to font size: 100% scale corresponds to base font size configured in GUI settings
+				const baseSize = this.plugin.settings.fontSize || 16;
+				const calculatedFontSize = baseSize * (this.scale / 100);
+				container.style.setProperty('--pdf-base-font-size', `${calculatedFontSize}px`);
+				
+				// Map scale to heading base font size: only scales with downscale percent, NOT with custom font size
+				const calculatedHeadingSize = 16 * (this.scale / 100);
+				container.style.setProperty('--pdf-heading-base-font-size', `${calculatedHeadingSize}px`);
+				container.style.setProperty('--pdf-page-margin', this.margin);
+			}
 		}
 		
-		// Re-trigger pagination to adapt immediately
-		this.postProcess();
+		// Re-trigger offscreen pagination and swap smoothly using morphdom to control scroll top precisely
+		this.restoreFromPages();
+		this.postProcess(this.inactiveContainer);
+		this.swapContainers(savedScrollTop);
 	}
+
+	private recycleComponent(type: 'upper' | 'lower') {
+		if (type === 'upper') {
+			this.upperComponent.unload();
+			this.removeChild(this.upperComponent);
+			this.upperComponent = new Component();
+			this.addChild(this.upperComponent);
+			this.upperComponent.load();
+		} else {
+			this.lowerComponent.unload();
+			this.removeChild(this.lowerComponent);
+			this.lowerComponent = new Component();
+			this.addChild(this.lowerComponent);
+			this.lowerComponent.load();
+		}
+	}
+
+
 
 	public async exportToPdf() {
 		if (!this.currentFile) return;

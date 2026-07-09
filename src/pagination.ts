@@ -119,6 +119,13 @@ function getTextNodeAndOffset(parent: Node, targetOffset: number): { node: Text;
 	return null;
 }
 
+function getScaledBottom(element: HTMLElement, page: HTMLElement): number {
+	const childRect = element.getBoundingClientRect();
+	const pageRect = page.getBoundingClientRect();
+	const scaleFactor = page.offsetWidth > 0 ? (pageRect.width / page.offsetWidth) : 1;
+	return scaleFactor > 0 ? (childRect.bottom - pageRect.top) / scaleFactor : (childRect.bottom - pageRect.top);
+}
+
 /**
  * Splits a block element (P, LI, BLOCKQUOTE) at the overflow boundary using
  * binary search on character offsets + DOM Range extraction.
@@ -144,15 +151,10 @@ export function splitElementAtOverflow(el: HTMLElement, maxContentBottom: number
 	// Clone child nodes to capture original state without using innerHTML
 	const originalChildren = Array.from(el.childNodes).map(node => node.cloneNode(true));
 
-	const pageEl = el.closest('.pdf-preview-page') as HTMLElement | null;
+	const pageEl = el.closest('.pdf-preview-page') as HTMLElement;
 	const getBottom = () => {
 		if (pageEl) {
-			const rect = el.getBoundingClientRect();
-			const pageRect = pageEl.getBoundingClientRect();
-			const scaleFactor = pageEl.offsetWidth > 0 ? (pageRect.width / pageEl.offsetWidth) : 1;
-			if (scaleFactor > 0) {
-				return (rect.bottom - pageRect.top) / scaleFactor;
-			}
+			return getScaledBottom(el, pageEl);
 		}
 		return el.offsetTop + el.offsetHeight;
 	};
@@ -247,13 +249,7 @@ export function splitElementAtOverflow(el: HTMLElement, maxContentBottom: number
 	return nextEl;
 }
 
-export interface PaginationConfig {
-	previewContainer: HTMLDivElement;
-	upperEl: HTMLDivElement;
-	lowerEl: HTMLDivElement;
-	showPageNumbers: boolean;
-	getPageDimensionsMm: () => { width: number; height: number };
-}
+import type { PaginationConfig } from './types';
 
 /**
  * Walks through all rendered elements and distributes them into
@@ -264,7 +260,10 @@ export function applyVirtualPagination(config: PaginationConfig) {
 	const { previewContainer, upperEl, lowerEl, showPageNumbers, getPageDimensionsMm } = config;
 
 	// If the view is hidden (e.g. in a background tab), skip pagination
-	if (!previewContainer || previewContainer.offsetHeight === 0) {
+	// We check the active (visible) container's height because the inactive container might collapse to 0 height
+	const activeContainer = previewContainer.parentElement?.querySelector('.pdf-preview-container.is-active') as HTMLElement;
+	const checkContainer = activeContainer || previewContainer;
+	if (!previewContainer || checkContainer.offsetHeight === 0) {
 		return;
 	}
 
@@ -328,7 +327,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 			// The entire row does NOT fit — split it across pages
 			currentPage.removeChild(el);
 
-			const columns = Array.from(el.querySelectorAll('.pdf-col')) as HTMLElement[];
+			const columns = Array.from(el.querySelectorAll('.pdf-col')).map(c => c as HTMLElement);
 			const sectionAttr = el.getAttribute('data-section') || '';
 
 			// Create the row container on the current page
@@ -388,7 +387,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 						let itemIndex = 1;
 
 						for (const li of listItems) {
-							const htmlLi = li as HTMLElement;
+							const htmlLi = li;
 							if (hasOverflowed) {
 								const nextListContainer = getOrCreateNextListContainer(nextColElements[colIdx], listType, htmlChild, sectionAttr);
 								nextListContainer.appendChild(htmlLi);
@@ -397,10 +396,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 
 							currentListContainer.appendChild(htmlLi);
 
-							const childRect = htmlLi.getBoundingClientRect();
-							const pageRect = currentPage.getBoundingClientRect();
-							const scaleFactor = currentPage.offsetWidth > 0 ? (pageRect.width / currentPage.offsetWidth) : 1;
-							const totalBottom = scaleFactor > 0 ? (childRect.bottom - pageRect.top) / scaleFactor : (childRect.bottom - pageRect.top);
+							const totalBottom = getScaledBottom(htmlLi, currentPage);
 
 							const isFirstEl = (currentListContainer.children.length === 1 && currentColEl.children.length === 1 && currentPage.children.length <= 1);
 
@@ -441,10 +437,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 
 					currentColEl.appendChild(htmlChild);
 
-					const childRect = htmlChild.getBoundingClientRect();
-					const pageRect = currentPage.getBoundingClientRect();
-					const scaleFactor = currentPage.offsetWidth > 0 ? (pageRect.width / currentPage.offsetWidth) : 1;
-					const totalBottom = scaleFactor > 0 ? (childRect.bottom - pageRect.top) / scaleFactor : (childRect.bottom - pageRect.top);
+					const totalBottom = getScaledBottom(htmlChild, currentPage);
 
 					// If this is the absolute first element on the current page inside the columns,
 					// keep it to avoid infinite loops, even if it overflows.
@@ -574,10 +567,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 
 						currentListContainer.appendChild(htmlLi);
 
-						const childRect = htmlLi.getBoundingClientRect();
-						const pageRect = currentPage.getBoundingClientRect();
-						const scaleFactor = currentPage.offsetWidth > 0 ? (pageRect.width / currentPage.offsetWidth) : 1;
-						const totalBottom = scaleFactor > 0 ? (childRect.bottom - pageRect.top) / scaleFactor : (childRect.bottom - pageRect.top);
+						const totalBottom = getScaledBottom(htmlLi, currentPage);
 
 						const isFirstEl = (currentListContainer.children.length === 1 && currentCenterEl.children.length === 1 && currentPage.children.length <= 1);
 
@@ -619,10 +609,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 				currentCenterEl.appendChild(htmlChild);
 
 				// Measure height
-				const childRect = htmlChild.getBoundingClientRect();
-				const pageRect = currentPage.getBoundingClientRect();
-				const scaleFactor = currentPage.offsetWidth > 0 ? (pageRect.width / currentPage.offsetWidth) : 1;
-				const totalBottom = scaleFactor > 0 ? (childRect.bottom - pageRect.top) / scaleFactor : (childRect.bottom - pageRect.top);
+				const totalBottom = getScaledBottom(htmlChild, currentPage);
 
 				const isFirstEl = (currentCenterEl.children.length === 1 && currentPage.children.length <= 1);
 
@@ -732,10 +719,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 
 				currentTbody.appendChild(row);
 
-				const childRect = row.getBoundingClientRect();
-				const pageRect = currentPage.getBoundingClientRect();
-				const scaleFactor = currentPage.offsetWidth > 0 ? (pageRect.width / currentPage.offsetWidth) : 1;
-				const totalBottom = scaleFactor > 0 ? (childRect.bottom - pageRect.top) / scaleFactor : (childRect.bottom - pageRect.top);
+				const totalBottom = getScaledBottom(row, currentPage);
 
 				const isFirstEl = (currentTbody.children.length === 1 && currentPage.children.length <= 1);
 
@@ -898,15 +882,6 @@ export function applyVirtualPagination(config: PaginationConfig) {
 	});
 }
 
-function getElementOffsetTopRelativeTo(el: HTMLElement, targetParent: HTMLElement): number {
-	let offsetTop = 0;
-	let current: HTMLElement | null = el;
-	while (current && current !== targetParent && current !== activeDocument.body) {
-		offsetTop += current.offsetTop;
-		current = current.offsetParent as HTMLElement | null;
-	}
-	return offsetTop;
-}
 
 function getOrCreateNextListContainer(overflowList: HTMLElement[] | undefined, listType: string, originalList: HTMLElement, sectionAttr: string): HTMLElement {
 	if (!overflowList) {
@@ -968,7 +943,6 @@ function splitTableInsideContainer(
 	});
 
 	let currentTbody = currentTable.createEl('tbody');
-	const nextBodyRows: HTMLTableRowElement[] = [];
 
 	for (const row of bodyRows) {
 		if (hasOverflowedRef.value) {
@@ -980,10 +954,7 @@ function splitTableInsideContainer(
 
 		currentTbody.appendChild(row);
 
-		const childRect = row.getBoundingClientRect();
-		const pageRect = currentPage.getBoundingClientRect();
-		const scaleFactor = currentPage.offsetWidth > 0 ? (pageRect.width / currentPage.offsetWidth) : 1;
-		const totalBottom = scaleFactor > 0 ? (childRect.bottom - pageRect.top) / scaleFactor : (childRect.bottom - pageRect.top);
+		const totalBottom = getScaledBottom(row, currentPage);
 
 		const isFirstEl = (currentTbody.children.length === 1 && currentParentEl.children.length === 1 && currentPage.children.length <= 1);
 

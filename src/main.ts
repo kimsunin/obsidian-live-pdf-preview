@@ -1,31 +1,7 @@
 import { Plugin } from 'obsidian';
-import { VIEW_TYPE_PDF_PREVIEW, PdfPreviewView } from './view';
-
-export interface LivePdfPreviewSettings {
-	pageSize: string;
-	landscape: boolean;
-	margin: string;
-	scale: number;
-	showTitle: boolean;
-	customCss: string;
-	fontFamily: string;
-	fontSize: number;
-	textColor: string;
-	backgroundColor: string;
-}
-
-const DEFAULT_SETTINGS: LivePdfPreviewSettings = {
-	pageSize: 'A4',
-	landscape: false,
-	margin: '20mm',
-	scale: 100,
-	showTitle: true,
-	customCss: '',
-	fontFamily: 'default',
-	fontSize: 16,
-	textColor: 'default',
-	backgroundColor: 'default',
-};
+import { PdfPreviewView } from './view';
+import { VIEW_TYPE_PDF_PREVIEW, DEFAULT_SETTINGS } from './types';
+import type { LivePdfPreviewSettings } from './types';
 
 export default class LivePdfPreviewPlugin extends Plugin {
 	public settings!: LivePdfPreviewSettings;
@@ -55,7 +31,7 @@ export default class LivePdfPreviewPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, (await this.loadData()) as Partial<LivePdfPreviewSettings> | null);
 	}
 
 	async saveSettings() {

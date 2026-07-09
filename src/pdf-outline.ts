@@ -1,4 +1,4 @@
-import { PDFDocument, PDFName, PDFNumber, PDFRef, PDFString, PDFDict, PDFHexString } from 'pdf-lib';
+import { PDFDocument, PDFName, PDFNumber, PDFRef, PDFDict, PDFHexString } from 'pdf-lib';
 
 interface OutlineItem {
 	text: string;

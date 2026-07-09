@@ -1,50 +1,99 @@
-import { App, Modal, Notice, Setting, DropdownComponent, SliderComponent, ToggleComponent, ColorComponent } from 'obsidian';
+import { App, Modal, Notice, Setting, DropdownComponent, SliderComponent, ToggleComponent, ColorComponent, debounce } from 'obsidian';
 import { PDFDocument } from 'pdf-lib';
 import { addOutline } from './pdf-outline';
 import type { PdfPreviewView } from './view';
+import type { ExportConfig, ElectronModule } from './types';
+import { FONT_DISPLAY_NAMES } from './types';
 
-interface ElectronWebContents {
-	printToPDF(options: {
-		marginsType: number;
-		pageSize: string;
-		printBackground: boolean;
-		landscape: boolean;
-		scale: number;
-	}): Promise<ArrayBuffer>;
-}
-
-interface ElectronModule {
-	remote: {
-		getCurrentWebContents(): ElectronWebContents;
-	};
-}
-
-export class ExportPdfModal extends Modal {
-	private view: PdfPreviewView;
-	private isConfirmed = false;
-	private originalPageSize!: string;
-	private originalMargin!: string;
-	private originalScale!: number;
-	private originalLandscape!: boolean;
-	private originalShowTitle!: boolean;
+export abstract class BasePreviewModal extends Modal {
+	protected view: PdfPreviewView;
+	protected isConfirmed = false;
 
 	constructor(app: App, view: PdfPreviewView) {
 		super(app);
 		this.view = view;
 	}
 
+	abstract saveOriginals(): void;
+	abstract restoreOriginals(): void;
+	abstract buildContent(contentEl: HTMLElement): void;
+
 	onOpen() {
 		const { contentEl } = this;
 		contentEl.empty();
-		
-		this.titleEl.setText('Page settings');
+		this.saveOriginals();
+		this.buildContent(contentEl);
+	}
 
-		// Store original values
+	onClose() {
+		const { contentEl } = this;
+		contentEl.empty();
+		if (!this.isConfirmed) {
+			this.restoreOriginals();
+		}
+	}
+
+	protected createFooterButtons(
+		contentEl: HTMLElement,
+		onReset: () => void,
+		onDone?: () => void
+	) {
+		const buttonContainer = contentEl.createEl('div', {
+			cls: 'pdf-modal-button-container',
+			attr: { style: 'margin-top: 24px; display: flex; justify-content: flex-end; gap: 12px;' }
+		});
+
+		const resetBtn = buttonContainer.createEl('button', {
+			text: 'Reset',
+		});
+		resetBtn.addEventListener('click', onReset);
+
+		const doneBtn = buttonContainer.createEl('button', {
+			cls: 'mod-cta',
+			text: 'Done',
+		});
+		doneBtn.addEventListener('click', () => {
+			this.isConfirmed = true;
+			if (onDone) {
+				onDone();
+			} else {
+				void this.view.plugin.saveSettings();
+			}
+			this.close();
+		});
+	}
+}
+
+export class ExportPdfModal extends BasePreviewModal {
+	private originalPageSize!: string;
+	private originalMargin!: string;
+	private originalScale!: number;
+	private originalLandscape!: boolean;
+	private originalShowTitle!: boolean;
+
+	saveOriginals() {
 		this.originalPageSize = this.view.pageSize;
 		this.originalMargin = this.view.margin;
 		this.originalScale = this.view.scale;
 		this.originalLandscape = this.view.landscape;
 		this.originalShowTitle = this.view.showTitle;
+	}
+
+	restoreOriginals() {
+		this.view.pageSize = this.originalPageSize;
+		this.view.margin = this.originalMargin;
+		this.view.scale = this.originalScale;
+		this.view.landscape = this.originalLandscape;
+		if (this.view.showTitle !== this.originalShowTitle) {
+			this.view.showTitle = this.originalShowTitle;
+			this.view.cachedUpperText = '';
+			void this.view.renderFull(true);
+		}
+		this.view.updateLayoutSettings();
+	}
+
+	buildContent(contentEl: HTMLElement) {
+		this.titleEl.setText('Page settings');
 
 		let sizeDropdown!: DropdownComponent;
 		let marginDropdown!: DropdownComponent;
@@ -52,7 +101,6 @@ export class ExportPdfModal extends Modal {
 		let landscapeToggle!: ToggleComponent;
 		let showTitleToggle!: ToggleComponent;
 
-		// 1. Page Size
 		new Setting(contentEl)
 			.setName('Page size')
 			.addDropdown(dropdown => {
@@ -68,11 +116,10 @@ export class ExportPdfModal extends Modal {
 					.setValue(this.view.pageSize)
 					.onChange(value => {
 						this.view.pageSize = value;
-						this.view.updateLayoutSettings();
+						this.view.updateLayoutSettings(true);
 					});
 			});
 
-		// 2. Margins
 		new Setting(contentEl)
 			.setName('Margins')
 			.addDropdown(dropdown => {
@@ -86,11 +133,10 @@ export class ExportPdfModal extends Modal {
 					.setValue(this.view.margin)
 					.onChange(value => {
 						this.view.margin = value;
-						this.view.updateLayoutSettings();
+						this.view.updateLayoutSettings(true);
 					});
 			});
 
-		// 3. Downscale percent
 		new Setting(contentEl)
 			.setName('Downscale percent')
 			.addSlider(slider => {
@@ -101,11 +147,10 @@ export class ExportPdfModal extends Modal {
 					.setDynamicTooltip()
 					.onChange(value => {
 						this.view.scale = value;
-						this.view.updateLayoutSettings();
+						this.view.updateLayoutSettings(true);
 					});
 			});
 
-		// 4. Landscape
 		new Setting(contentEl)
 			.setName('Landscape')
 			.addToggle(toggle => {
@@ -114,11 +159,10 @@ export class ExportPdfModal extends Modal {
 					.setValue(this.view.landscape)
 					.onChange(value => {
 						this.view.landscape = value;
-						this.view.updateLayoutSettings();
+						this.view.updateLayoutSettings(true);
 					});
 			});
 
-		// 5. Show file name as title
 		new Setting(contentEl)
 			.setName('Show file name as title')
 			.addToggle(toggle => {
@@ -127,98 +171,60 @@ export class ExportPdfModal extends Modal {
 					.setValue(this.view.showTitle)
 					.onChange(value => {
 						this.view.showTitle = value;
-						this.view.cachedUpperText = ''; // Force redraw
-						void this.view.renderFull();
+						this.view.cachedUpperText = '';
+						void this.view.renderFull(true);
 					});
 			});
 
-		// Footer buttons
-		const buttonContainer = contentEl.createEl('div', {
-			cls: 'pdf-modal-button-container',
-			attr: { style: 'margin-top: 24px; display: flex; justify-content: flex-end; gap: 12px;' }
-		});
+		this.createFooterButtons(
+			contentEl,
+			() => {
+				this.view.pageSize = 'A4';
+				this.view.margin = '20mm';
+				this.view.scale = 100;
+				this.view.landscape = false;
+				
+				const showTitleChanged = this.view.showTitle !== true;
+				this.view.showTitle = true;
 
-		const resetBtn = buttonContainer.createEl('button', {
-			text: 'Reset',
-		});
-		resetBtn.addEventListener('click', () => {
-			// Reset to defaults in view properties (temporary until Done is clicked)
-			this.view.pageSize = 'A4';
-			this.view.margin = '20mm';
-			this.view.scale = 100;
-			this.view.landscape = false;
-			
-			const showTitleChanged = this.view.showTitle !== true;
-			this.view.showTitle = true;
-
-			// Update UI components in the modal
-			sizeDropdown.setValue('A4');
-			marginDropdown.setValue('20mm');
-			scaleSlider.setValue(100);
-			landscapeToggle.setValue(false);
-			showTitleToggle.setValue(true);
-			
-			if (showTitleChanged) {
-				this.view.cachedUpperText = ''; // Force redraw
-				void this.view.renderFull();
+				sizeDropdown.setValue('A4');
+				marginDropdown.setValue('20mm');
+				scaleSlider.setValue(100);
+				landscapeToggle.setValue(false);
+				showTitleToggle.setValue(true);
+				
+				if (showTitleChanged) {
+					this.view.cachedUpperText = '';
+					void this.view.renderFull(true);
+				}
+				this.view.updateLayoutSettings();
+			},
+			() => {
+				this.view.plugin.settings.pageSize = this.view.pageSize;
+				this.view.plugin.settings.margin = this.view.margin;
+				this.view.plugin.settings.scale = this.view.scale;
+				this.view.plugin.settings.landscape = this.view.landscape;
+				this.view.plugin.settings.showTitle = this.view.showTitle;
+				void this.view.plugin.saveSettings();
 			}
-			this.view.updateLayoutSettings();
-		});
-
-		const doneBtn = buttonContainer.createEl('button', {
-			cls: 'mod-cta',
-			text: 'Done',
-		});
-		doneBtn.addEventListener('click', () => {
-			this.isConfirmed = true;
-			// Persist settings
-			this.view.plugin.settings.pageSize = this.view.pageSize;
-			this.view.plugin.settings.margin = this.view.margin;
-			this.view.plugin.settings.scale = this.view.scale;
-			this.view.plugin.settings.landscape = this.view.landscape;
-			this.view.plugin.settings.showTitle = this.view.showTitle;
-			void this.view.plugin.saveSettings();
-			this.close();
-		});
-	}
-
-	onClose() {
-		const { contentEl } = this;
-		contentEl.empty();
-
-		if (!this.isConfirmed) {
-			// Restore original values
-			this.view.pageSize = this.originalPageSize;
-			this.view.margin = this.originalMargin;
-			this.view.scale = this.originalScale;
-			this.view.landscape = this.originalLandscape;
-			if (this.view.showTitle !== this.originalShowTitle) {
-				this.view.showTitle = this.originalShowTitle;
-				this.view.cachedUpperText = ''; // Force redraw
-				void this.view.renderFull();
-			}
-			this.view.updateLayoutSettings();
-		}
+		);
 	}
 }
 
-export class CustomCssModal extends Modal {
-	private view: PdfPreviewView;
-	private isConfirmed = false;
+export class CustomCssModal extends BasePreviewModal {
 	private originalCss!: string;
 
-	constructor(app: App, view: PdfPreviewView) {
-		super(app);
-		this.view = view;
+	saveOriginals() {
+		this.originalCss = this.view.plugin.settings.customCss || '';
 	}
 
-	onOpen() {
-		const { contentEl } = this;
-		contentEl.empty();
-		
+	restoreOriginals() {
+		this.view.plugin.settings.customCss = this.originalCss;
+		this.view.updateCustomCss(false);
+	}
+
+	buildContent(contentEl: HTMLElement) {
 		this.titleEl.setText('Custom CSS');
-		
-		this.originalCss = this.view.plugin.settings.customCss || '';
 
 		const textareaContainer = contentEl.createEl('div', {
 			attr: { style: 'width: 100%; margin-bottom: 20px;' }
@@ -232,7 +238,6 @@ export class CustomCssModal extends Modal {
 		});
 		textarea.value = this.originalCss;
 
-		// Allow Tab key to insert 4 spaces instead of losing focus
 		textarea.addEventListener('keydown', (e: KeyboardEvent) => {
 			if (e.key === 'Tab') {
 				e.preventDefault();
@@ -244,102 +249,74 @@ export class CustomCssModal extends Modal {
 			}
 		});
 
-		// Real-time preview: apply CSS as the user types
+		const debouncedUpdate = debounce(() => {
+			this.view.plugin.settings.customCss = textarea.value;
+			this.view.updateCustomCss(true);
+		}, 150);
+
 		textarea.addEventListener('input', () => {
-			this.view.plugin.settings.customCss = textarea.value;
-			this.view.updateCustomCss();
+			debouncedUpdate();
 		});
 
-		const buttonContainer = contentEl.createEl('div', {
-			cls: 'pdf-modal-button-container',
-			attr: { style: 'display: flex; justify-content: flex-end; gap: 12px;' }
-		});
-
-		// Reset button (clear textarea, but do not save or close)
-		const resetBtn = buttonContainer.createEl('button', {
-			text: 'Reset',
-		});
-		resetBtn.addEventListener('click', () => {
-			textarea.value = '';
-			this.view.plugin.settings.customCss = '';
-			this.view.updateCustomCss();
-		});
-
-		// Done button (save and close)
-		const doneBtn = buttonContainer.createEl('button', {
-			cls: 'mod-cta',
-			text: 'Done',
-		});
-		doneBtn.addEventListener('click', () => {
-			this.isConfirmed = true;
-			this.view.plugin.settings.customCss = textarea.value;
-			void this.view.plugin.saveSettings();
-			this.view.updateCustomCss();
-			this.close();
-		});
-	}
-
-	onClose() {
-		const { contentEl } = this;
-		contentEl.empty();
-		
-		if (!this.isConfirmed) {
-			this.view.plugin.settings.customCss = this.originalCss;
-			this.view.updateCustomCss();
-		}
+		this.createFooterButtons(
+			contentEl,
+			() => {
+				textarea.value = '';
+				this.view.plugin.settings.customCss = '';
+				this.view.updateCustomCss(false);
+			},
+			() => {
+				this.view.plugin.settings.customCss = textarea.value;
+				void this.view.plugin.saveSettings();
+				this.view.updateCustomCss(false);
+			}
+		);
 	}
 }
 
-export class QuickStyleModal extends Modal {
-	private view: PdfPreviewView;
-	private isConfirmed = false;
-	
+export class QuickStyleModal extends BasePreviewModal {
 	private originalFontFamily!: string;
 	private originalFontSize!: number;
 	private originalTextColor!: string;
-	private originalBackgroundColor!: string;
 
-	constructor(app: App, view: PdfPreviewView) {
-		super(app);
-		this.view = view;
-	}
-
-	onOpen() {
-		const { contentEl } = this;
-		contentEl.empty();
-
-		this.titleEl.setText('Quick styles');
-
+	saveOriginals() {
 		const settings = this.view.plugin.settings;
 		this.originalFontFamily = settings.fontFamily || 'default';
 		this.originalFontSize = settings.fontSize || 16;
 		this.originalTextColor = settings.textColor || 'default';
-		this.originalBackgroundColor = settings.backgroundColor || 'default';
+	}
 
+	restoreOriginals() {
+		this.view.plugin.settings.fontFamily = this.originalFontFamily;
+		this.view.plugin.settings.fontSize = this.originalFontSize;
+		this.view.plugin.settings.textColor = this.originalTextColor;
+		this.view.updateGuiCss(false);
+	}
+
+	buildContent(contentEl: HTMLElement) {
+		this.titleEl.setText('Quick styles');
+
+		const settings = this.view.plugin.settings;
 		let fontDropdown: DropdownComponent;
 		let sizeSlider: SliderComponent;
 		let colorPicker: ColorComponent;
 
-		// 1. Font Family Setting
 		new Setting(contentEl)
 			.setName('Font family')
 			.setDesc('Choose the base font style for the PDF page.')
 			.addDropdown(dropdown => {
 				fontDropdown = dropdown;
+				Object.entries(FONT_DISPLAY_NAMES).forEach(([key, label]) => {
+					dropdown.addOption(key, label);
+				});
 				dropdown
-					.addOption('default', 'Default')
-					.addOption('minimal', 'Minimal')
-					.addOption('editorial', 'Editorial')
-					.addOption('novel', 'Warm novel')
-					.addOption('technical', 'Technical')
 					.setValue(settings.fontFamily)
 					.onChange(value => {
 						this.view.plugin.settings.fontFamily = value;
-						this.view.updateGuiCss();
+						this.view.updateGuiCss(true);
 					});
 			});
 
-		// 2. Font Size Setting
 		new Setting(contentEl)
 			.setName('Font size')
 			.setDesc('Adjust the base text font size (default: 16px).')
@@ -351,11 +328,10 @@ export class QuickStyleModal extends Modal {
 					.setDynamicTooltip()
 					.onChange(value => {
 						this.view.plugin.settings.fontSize = value;
-						this.view.updateGuiCss();
+						this.view.updateGuiCss(true);
 					});
 			});
 
-		// 3. Text Color Setting
 		new Setting(contentEl)
 			.setName('Text color')
 			.setDesc('Set the main body text color.')
@@ -365,7 +341,7 @@ export class QuickStyleModal extends Modal {
 					.onClick(() => {
 						this.view.plugin.settings.textColor = 'default';
 						colorPicker.setValue('#000000');
-						this.view.updateGuiCss();
+						this.view.updateGuiCss(true);
 					});
 			})
 			.addColorPicker(picker => {
@@ -374,67 +350,28 @@ export class QuickStyleModal extends Modal {
 					.setValue(settings.textColor === 'default' ? '#000000' : settings.textColor)
 					.onChange(value => {
 						this.view.plugin.settings.textColor = value;
-						this.view.updateGuiCss();
+						this.view.updateGuiCss(true);
 					});
 			});
 
-		// Footer buttons
-		const buttonContainer = contentEl.createEl('div', {
-			cls: 'pdf-modal-button-container',
-			attr: { style: 'margin-top: 24px; display: flex; justify-content: flex-end; gap: 12px;' }
-		});
+		this.createFooterButtons(
+			contentEl,
+			() => {
+				this.view.plugin.settings.fontFamily = 'default';
+				this.view.plugin.settings.fontSize = 16;
+				this.view.plugin.settings.textColor = 'default';
 
-		// Reset button
-		const resetBtn = buttonContainer.createEl('button', {
-			text: 'Reset',
-		});
-		resetBtn.addEventListener('click', () => {
-			this.view.plugin.settings.fontFamily = 'default';
-			this.view.plugin.settings.fontSize = 16;
-			this.view.plugin.settings.textColor = 'default';
-			this.view.plugin.settings.backgroundColor = 'default';
+				fontDropdown.setValue('default');
+				sizeSlider.setValue(16);
+				colorPicker.setValue('#000000');
 
-			// Update UI
-			fontDropdown.setValue('default');
-			sizeSlider.setValue(16);
-			colorPicker.setValue('#000000');
-
-			this.view.updateGuiCss();
-		});
-
-		// Done button
-		const doneBtn = buttonContainer.createEl('button', {
-			cls: 'mod-cta',
-			text: 'Done',
-		});
-		doneBtn.addEventListener('click', () => {
-			this.isConfirmed = true;
-			void this.view.plugin.saveSettings();
-			this.close();
-		});
-	}
-
-	onClose() {
-		const { contentEl } = this;
-		contentEl.empty();
-
-		if (!this.isConfirmed) {
-			this.view.plugin.settings.fontFamily = this.originalFontFamily;
-			this.view.plugin.settings.fontSize = this.originalFontSize;
-			this.view.plugin.settings.textColor = this.originalTextColor;
-			this.view.plugin.settings.backgroundColor = this.originalBackgroundColor;
-			this.view.updateGuiCss();
-		}
+				this.view.updateGuiCss(false);
+			}
+		);
 	}
 }
 
-export interface ExportConfig {
-	previewContainer: HTMLDivElement;
-	pageSize: string;
-	landscape: boolean;
-	scale: number;
-	currentFile: { basename: string };
-}
+
 
 export async function exportToPdf(config: ExportConfig) {
 	const { previewContainer, pageSize, landscape, scale, currentFile } = config;
@@ -463,7 +400,7 @@ export async function exportToPdf(config: ExportConfig) {
 		activeDocument.body.classList.add('pdf-export-printing');
 
 		// Force a browser DOM style reflow and wait for layout to repaint completely
-		const _reflow = activeDocument.body.offsetHeight;
+		void activeDocument.body.offsetHeight;
 		await new Promise<void>(resolve => {
 			window.setTimeout(resolve, 100);
 		});
