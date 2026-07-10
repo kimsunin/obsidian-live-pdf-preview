@@ -85,3 +85,7 @@ Click the palette icon (🎨) next to the settings gear on the preview header to
 
 This project is licensed under the [MIT License](LICENSE).
 
+## Contributing
+
+Contributions, issues, and pull requests are welcome!
+
