@@ -197,7 +197,7 @@ export class ExportPdfModal extends BasePreviewModal {
 					this.view.cachedUpperText = '';
 					void this.view.renderFull(true);
 				}
-				this.view.updateLayoutSettings();
+				this.view.updateLayoutSettings(true);
 			},
 			() => {
 				this.view.plugin.settings.pageSize = this.view.pageSize;
@@ -263,7 +263,7 @@ export class CustomCssModal extends BasePreviewModal {
 			() => {
 				textarea.value = '';
 				this.view.plugin.settings.customCss = '';
-				this.view.updateCustomCss(false);
+				this.view.updateCustomCss(true);
 			},
 			() => {
 				this.view.plugin.settings.customCss = textarea.value;
@@ -365,7 +365,7 @@ export class QuickStyleModal extends BasePreviewModal {
 				sizeSlider.setValue(16);
 				colorPicker.setValue('#000000');
 
-				this.view.updateGuiCss(false);
+				this.view.updateGuiCss(true);
 			}
 		);
 	}

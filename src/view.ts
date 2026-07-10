@@ -43,6 +43,16 @@ export class PdfPreviewView extends ItemView {
 	private isProgrammaticScrolling = false;
 	private targetScrollTop: number | null = null;
 	private scrollLockTimeout: number | null = null;
+	private isRendering = false;
+	private pendingRender = false;
+
+	private prevPageSize = '';
+	private prevMargin = '';
+	private prevScale = -1;
+	private prevLandscape = false;
+	private prevFontSize = -1;
+	private prevFontFamily = '';
+	private prevTextColor = '';
 
 	private debouncedRender = debounce(() => {
 		void this.renderPartial();
@@ -60,6 +70,15 @@ export class PdfPreviewView extends ItemView {
 		this.margin = this.plugin.settings.margin;
 		this.scale = this.plugin.settings.scale;
 		this.showTitle = this.plugin.settings.showTitle;
+		
+		// Initialize change tracking caches
+		this.prevPageSize = this.pageSize;
+		this.prevMargin = this.margin;
+		this.prevScale = this.scale;
+		this.prevLandscape = this.landscape;
+		this.prevFontSize = this.plugin.settings.fontSize || 16;
+		this.prevFontFamily = this.plugin.settings.fontFamily || 'default';
+		this.prevTextColor = this.plugin.settings.textColor || 'default';
 	}
 
 	getViewType(): string {
@@ -445,77 +464,91 @@ export class PdfPreviewView extends ItemView {
 	private async renderPartial() {
 		if (!this.currentFile) return;
 
-		// Find the workspace leaf displaying the current file to read its contents
-		let targetView: MarkdownView | null = null;
-		this.app.workspace.iterateAllLeaves((leaf) => {
-			if (leaf.view.getViewType() === 'markdown') {
-				const mdView = leaf.view as MarkdownView;
-				if (mdView.file === this.currentFile) {
-					targetView = mdView;
+		if (this.isRendering) {
+			this.pendingRender = true;
+			return;
+		}
+
+		this.isRendering = true;
+		this.pendingRender = false;
+
+		try {
+			// Find the workspace leaf displaying the current file to read its contents
+			let targetView: MarkdownView | null = null;
+			this.app.workspace.iterateAllLeaves((leaf) => {
+				if (leaf.view.getViewType() === 'markdown') {
+					const mdView = leaf.view as MarkdownView;
+					if (mdView.file === this.currentFile) {
+						targetView = mdView;
+					}
 				}
+			});
+
+			if (!targetView) return;
+
+			const activeView = targetView as MarkdownView;
+
+			this.restoreFromPages();
+			const editor = activeView.editor;
+			let text = editor.getValue();
+			const sourcePath = this.currentFile.path;
+			let cursorLine = editor.getCursor().line;
+
+			// Preprocess horizontal rules to guarantee at least 2 trailing empty lines for rendering safety
+			const fixed = fixHorizontalRules(text, cursorLine);
+			text = fixed.text;
+			cursorLine = fixed.cursorLine || cursorLine;
+
+			if (this.showTitle) {
+				text = `# ${this.currentFile.basename}\n\n` + text;
+				cursorLine = cursorLine + 2;
 			}
-		});
 
-		if (!targetView) return;
+			// Preprocess indentation on the entire text first to keep code block tracking accurate
+			const processedText = processMarkdownIndentation(text);
 
-		const activeView = targetView as MarkdownView;
+			// Find safe block boundary above cursor
+			const cutLine = findCutLine(processedText, cursorLine);
+			const lines = processedText.split('\n');
+			const upperText = lines.slice(0, cutLine).join('\n');
+			const lowerText = lines.slice(cutLine).join('\n');
 
-		this.restoreFromPages();
-		const editor = activeView.editor;
-		let text = editor.getValue();
-		const sourcePath = this.currentFile.path;
-		let cursorLine = editor.getCursor().line;
+			if (upperText === this.cachedUpperText) {
+				// Upper unchanged → only re-render the lower section
+				this.lowerEl.empty();
+				this.recycleComponent('lower');
 
-		// Preprocess horizontal rules to guarantee at least 2 trailing empty lines for rendering safety
-		const fixed = fixHorizontalRules(text, cursorLine);
-		text = fixed.text;
-		cursorLine = fixed.cursorLine || cursorLine;
+				if (lowerText) {
+					await MarkdownRenderer.render(this.app, fixColumnLines(lowerText), this.lowerEl, sourcePath, this.lowerComponent);
+				}
+			} else {
+				// Upper changed → full re-render with new split
+				this.upperEl.empty();
+				this.lowerEl.empty();
 
-		if (this.showTitle) {
-			text = `# ${this.currentFile.basename}\n\n` + text;
-			cursorLine = cursorLine + 2;
+				this.recycleComponent('upper');
+				this.recycleComponent('lower');
+
+				if (upperText) {
+					await MarkdownRenderer.render(this.app, fixColumnLines(upperText), this.upperEl, sourcePath, this.upperComponent);
+				}
+				if (lowerText) {
+					await MarkdownRenderer.render(this.app, fixColumnLines(lowerText), this.lowerEl, sourcePath, this.lowerComponent);
+				}
+
+				this.cachedUpperText = upperText;
+			}
+
+			this.postProcess(this.inactiveContainer);
+			this.swapContainers();
+			this.scrollToActiveSection();
+		} finally {
+			this.isRendering = false;
+			if (this.pendingRender) {
+				this.pendingRender = false;
+				void this.renderPartial();
+			}
 		}
-
-		// Preprocess indentation on the entire text first to keep code block tracking accurate
-		const processedText = processMarkdownIndentation(text);
-
-		// Find safe block boundary above cursor
-		const cutLine = findCutLine(processedText, cursorLine);
-		const lines = processedText.split('\n');
-		const upperText = lines.slice(0, cutLine).join('\n');
-		const lowerText = lines.slice(cutLine).join('\n');
-
-		if (upperText === this.cachedUpperText) {
-			// Upper unchanged → only re-render the lower section
-			this.lowerEl.empty();
-			this.recycleComponent('lower');
-
-			if (lowerText) {
-				await MarkdownRenderer.render(this.app, fixColumnLines(lowerText), this.lowerEl, sourcePath, this.lowerComponent);
-			}
-		} else {
-			// Upper changed → full re-render with new split
-			this.upperEl.empty();
-			this.lowerEl.empty();
-
-			this.recycleComponent('upper');
-			this.recycleComponent('lower');
-
-			if (upperText) {
-				await MarkdownRenderer.render(this.app, fixColumnLines(upperText), this.upperEl, sourcePath, this.upperComponent);
-			}
-			if (lowerText) {
-				await MarkdownRenderer.render(this.app, fixColumnLines(lowerText), this.lowerEl, sourcePath, this.lowerComponent);
-			}
-
-			this.cachedUpperText = upperText;
-		}
-
-
-
-		this.postProcess(this.inactiveContainer);
-		this.swapContainers();
-		this.scrollToActiveSection();
 	}
 
 
@@ -676,11 +709,37 @@ ${rawCss}
 		const rulesAfter = this.getValidRulesText(styleEl);
 		const isStyleChanged = rulesBefore !== rulesAfter;
 
-		this.updateLayoutSettings(resetScroll && isStyleChanged);
+		this.updateLayoutSettings(false, resetScroll && isStyleChanged);
 	}
 
-	public updateLayoutSettings(resetScroll = false) {
-		const savedScrollTop = resetScroll ? 0 : (this.activeContainer ? this.activeContainer.scrollTop : 0);
+	public updateLayoutSettings(resetScroll = false, forceResetScroll = false) {
+		const isPageSizeChanged = this.prevPageSize !== this.pageSize;
+		const isMarginChanged = this.prevMargin !== this.margin;
+		const isScaleChanged = this.prevScale !== this.scale;
+		const isLandscapeChanged = this.prevLandscape !== this.landscape;
+		
+		const currentFontSize = this.plugin.settings.fontSize || 16;
+		const isFontSizeChanged = this.prevFontSize !== currentFontSize;
+		
+		const currentFontFamily = this.plugin.settings.fontFamily || 'default';
+		const isFontFamilyChanged = this.prevFontFamily !== currentFontFamily;
+		
+		const currentTextColor = this.plugin.settings.textColor || 'default';
+		const isTextColorChanged = this.prevTextColor !== currentTextColor;
+
+		const isLayoutChanged = isPageSizeChanged || isMarginChanged || isScaleChanged || isLandscapeChanged || 
+		                         isFontSizeChanged || isFontFamilyChanged || isTextColorChanged;
+
+		// Update the change tracking caches
+		this.prevPageSize = this.pageSize;
+		this.prevMargin = this.margin;
+		this.prevScale = this.scale;
+		this.prevLandscape = this.landscape;
+		this.prevFontSize = currentFontSize;
+		this.prevFontFamily = currentFontFamily;
+		this.prevTextColor = currentTextColor;
+
+		const savedScrollTop = (forceResetScroll || (resetScroll && isLayoutChanged)) ? 0 : (this.activeContainer ? this.activeContainer.scrollTop : 0);
 
 		// Update CSS variables on both preview containers
 		const containers = [this.containerA, this.containerB];
