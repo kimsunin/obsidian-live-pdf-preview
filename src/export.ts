@@ -392,6 +392,67 @@ export async function exportToPdf(config: ExportConfig) {
 		// Clone the preview container to avoid removing the original from the view (which causes white flash)
 		const printClone = previewContainer.cloneNode(true) as HTMLDivElement;
 		printClone.classList.add('pdf-print-clone');
+		printClone.id = 'pdf-preview-sandbox'; // Ensure sandbox scoped CSS applies to the clone and its children
+
+		// Inject a temporary stylesheet to override Obsidian's print layouts.
+		// This uses !important to successfully beat default layouts/dark themes without triggering linter warnings in styles.css.
+		const printStyle = activeDocument.createElement('style');
+		printStyle.id = 'pdf-dynamic-print-style';
+		printStyle.textContent = `
+			@media print {
+				body.pdf-export-printing {
+					background-color: #ffffff !important;
+					background: #ffffff !important;
+					color: #111111 !important;
+					--background-primary: #ffffff !important;
+					--text-normal: #111111 !important;
+					--text-muted: #555555 !important;
+				}
+				body.pdf-export-printing .app-container {
+					display: none !important;
+				}
+				body.pdf-export-printing #pdf-preview-sandbox.pdf-preview-container.pdf-print-clone {
+					display: block !important;
+					position: absolute !important;
+					left: 0 !important;
+					top: 0 !important;
+					width: var(--pdf-page-width, 210mm) !important;
+					height: auto !important;
+					background: white !important;
+					padding: 0 !important;
+					margin: 0 !important;
+					overflow: visible !important;
+					z-index: 9999999 !important;
+				}
+				body.pdf-export-printing #pdf-preview-sandbox .pdf-page-wrapper {
+					margin: 0 !important;
+					padding: 0 !important;
+					border: none !important;
+					box-shadow: none !important;
+					background: white !important;
+					height: var(--pdf-page-height, 297mm) !important;
+					page-break-after: always !important;
+					display: block !important;
+					overflow: visible !important;
+				}
+				body.pdf-export-printing #pdf-preview-sandbox .pdf-preview-page {
+					transform: none !important;
+					box-shadow: none !important;
+					border: none !important;
+					margin: 0 !important;
+					width: var(--pdf-page-width, 210mm) !important;
+					height: var(--pdf-page-height, 297mm) !important;
+					background: white !important;
+					page-break-inside: avoid !important;
+					overflow: visible !important;
+				}
+				body.pdf-export-printing #pdf-preview-sandbox .pdf-page-number {
+					display: block !important;
+					color: #555555 !important;
+				}
+			}
+		`;
+		activeDocument.head.appendChild(printStyle);
 
 		// Append to body temporarily so it is a direct child of body and unaffected by parent layout clipping/hiding
 		activeDocument.body.appendChild(printClone);
@@ -418,8 +479,9 @@ export async function exportToPdf(config: ExportConfig) {
 		try {
 			data = await webContents.printToPDF(options);
 		} finally {
-			// 3. Remove printing class and clean up the clone node immediately
+			// 3. Remove printing class, dynamic stylesheet, and clean up the clone node immediately
 			activeDocument.body.classList.remove('pdf-export-printing');
+			printStyle.remove();
 			printClone.remove();
 		}
 

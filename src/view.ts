@@ -96,6 +96,7 @@ export class PdfPreviewView extends ItemView {
 	async onOpen() {
 		const container = this.contentEl;
 		container.empty();
+		container.id = 'pdf-preview-sandbox';
 
 		// Create header (Obsidian native style)
 		const headerEl = container.createEl('div', {
