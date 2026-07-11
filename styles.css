@@ -1,3 +1,4 @@
+/* stylelint-disable declaration-no-important */
 /*
   Obsidian Live PDF Preview Styling
 */
@@ -281,7 +282,6 @@
 	justify-content: center !important;
 	margin: 1.5em 0 !important;
 	page-break-inside: avoid !important;
-	break-inside: avoid !important;
 }
 
 .pdf-preview-page .block-language-mermaid svg,
@@ -421,7 +421,6 @@ li.pdf-list-split-continuation::after {
 		background: white !important;
 		height: var(--pdf-page-height, 297mm) !important;
 		page-break-after: always !important;
-		break-after: page !important;
 		display: block !important;
 		overflow: visible !important;
 	}
@@ -436,7 +435,6 @@ li.pdf-list-split-continuation::after {
 		height: var(--pdf-page-height, 297mm) !important;
 		background: white !important;
 		page-break-inside: avoid !important;
-		break-inside: avoid !important;
 		overflow: visible !important;
 	}
 	
