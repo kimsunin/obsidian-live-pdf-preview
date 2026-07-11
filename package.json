@@ -12,6 +12,7 @@
 	},
 	"keywords": [],
 	"license": "MIT",
+	"funding": "https://ko-fi.com/kimsunin",
 	"devDependencies": {
 		"@eslint/js": "^9.39.4",
 		"@types/lodash-es": "^4.17.12",
