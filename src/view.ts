@@ -673,7 +673,7 @@ export class PdfPreviewView extends ItemView {
 		}
 		
 		if (fontRule || colorRule) {
-			cssText += `.pdf-preview-page {\n\t${fontRule}\n\t${colorRule}\n}\n`;
+			cssText += `#pdf-preview-sandbox .pdf-preview-page {\n\t${fontRule}\n\t${colorRule}\n}\n`;
 		}
 		
 		styleEl.textContent = cssText;
@@ -700,8 +700,8 @@ export class PdfPreviewView extends ItemView {
 		if (rawCss.trim() === '') {
 			styleEl.textContent = '';
 		} else {
-			// Wrap the custom CSS inside a highly specific chained class selector to allow overriding any theme-specific attributes (like th[align="left"]) without !important
-			styleEl.textContent = `.pdf-preview-page.pdf-preview-page.pdf-preview-page.pdf-preview-page.pdf-preview-page {
+			// Wrap the custom CSS inside a highly specific selector chain (#id + 3x classes) to override any default margins/font-sizes without !important
+			styleEl.textContent = `#pdf-preview-sandbox .pdf-preview-page.pdf-preview-page.pdf-preview-page {
 ${rawCss}
 }`;
 		}
