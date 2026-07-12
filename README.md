@@ -7,7 +7,7 @@ An Obsidian plugin that lets you edit Markdown documents while **viewing a real-
 
 It streamlines your writing workflow by combining document editing and publication layout design into one seamless process.
 
-![Obsidian Live PDF Preview Main Screenshot](./assets/2026-06-30_layout.png)
+![Obsidian Live PDF Preview Main Screenshot](./assets/2026-07-12_preview.gif)
 
 ## Who is this for?
 

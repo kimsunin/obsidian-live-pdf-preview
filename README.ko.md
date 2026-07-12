@@ -7,7 +7,7 @@ Obsidian에서 문서를 편집하면서 **실제 인쇄물(A4) 형식의 레이
 
 문서 작성과 인쇄 편집(출판 레이아웃)을 동시에 처리해 주는 편리한 문서 도구입니다.
 
-![Obsidian Live PDF Preview Main Screenshot](./assets/2026-06-30_layout.png)
+![Obsidian Live PDF Preview Main Screenshot](./assets/2026-07-12_preview.gif)
 
 ## 이런 분들께 추천합니다!
 
