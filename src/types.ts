@@ -49,7 +49,7 @@ export interface PaginationConfig {
 export interface ElectronWebContents {
 	printToPDF(options: {
 		marginsType: number;
-		pageSize: string | { widthInMicrons: number; heightInMicrons: number };
+		pageSize: string | { width: number; height: number };
 		printBackground: boolean;
 		landscape: boolean;
 		scale: number;

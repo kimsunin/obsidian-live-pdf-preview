@@ -520,7 +520,7 @@ export async function exportToPdf(config: ExportConfig) {
 		// 2. Call printToPDF
 		// Custom sizes must be expressed in microns (1 mm = 1000 microns); standard sizes pass a name string.
 		const pageSizeOption = pageSize === 'Custom'
-			? { widthInMicrons: Math.round(customPageWidth * 1000), heightInMicrons: Math.round(customPageHeight * 1000) }
+			? { width: Math.round(customPageWidth * 1000), height: Math.round(customPageHeight * 1000) }
 			: pageSize;
 		const options = {
 			marginsType: 1, // no margins
