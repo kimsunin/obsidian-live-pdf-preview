@@ -73,7 +73,7 @@ export function fixColumnLines(text: string): string {
 		const line = lines[i];
 		if (line !== undefined) {
 			const trimmed = line.trim();
-			if (trimmed === '//column' || trimmed === '//center' || /^\/\/column-\d+$/.test(trimmed)) {
+			if (trimmed === '//column' || trimmed === '//center' || /^\/\/column-\d+(?:\[[^\]]+\])?$/.test(trimmed)) {
 				if (i > 0 && lines[i - 1]?.trim() !== '') {
 					lines.splice(i, 0, '');
 					i++;

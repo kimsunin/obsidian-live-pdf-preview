@@ -578,8 +578,9 @@ export class PdfPreviewView extends ItemView {
 				const prevLineContent = editor.getLine(lineNum - 1);
 				const prevTrimmed = prevLineContent.trim();
 				
-				// Match '//column', '//center', or '//column-N' (where N is a digit)
-				if (prevTrimmed === '//column' || prevTrimmed === '//center' || /^\/\/column-\d+$/.test(prevTrimmed)) {
+				// Match '//column', '//center', or '//column-N' (where N is a digit),
+				// optionally carrying inline CSS: '//column-N[flex:0 0 40%]'
+				if (prevTrimmed === '//column' || prevTrimmed === '//center' || /^\/\/column-\d+(?:\[[^\]]+\])?$/.test(prevTrimmed)) {
 					const currentLineContent = editor.getLine(lineNum);
 					if (currentLineContent.trim() === '') {
 						// Count occurrences in the entire document to see if a closing tag already exists

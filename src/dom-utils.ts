@@ -35,17 +35,20 @@ export function groupColumns(container: HTMLElement) {
 				// Support columns 1, 2, and 3
 				const colStarts = [-1, -1, -1, -1];
 				const colEnds = [-1, -1, -1, -1];
+				// Optional inline CSS from the opening marker: //column-N[flex:0 0 40%]
+				const colStyles: (string | null)[] = [null, null, null, null];
 
 				for (let j = i + 1; j < closeIndex; j++) {
 					const subChild = children[j];
 					if (subChild) {
 						const text = subChild.textContent?.trim();
-						const colMatch = text?.match(/^\/\/column-(\d+)$/);
+						const colMatch = text?.match(/^\/\/column-(\d+)(?:\[([^\]]+)\])?$/);
 						if (colMatch && colMatch[1]) {
 							const colIdx = parseInt(colMatch[1], 10);
 							if (colIdx >= 1 && colIdx <= 3) {
 								if (colStarts[colIdx] === -1) {
 									colStarts[colIdx] = j;
+									colStyles[colIdx] = colMatch[2] ?? null;
 								} else {
 									colEnds[colIdx] = j;
 								}
@@ -61,6 +64,10 @@ export function groupColumns(container: HTMLElement) {
 					if (cStart !== undefined && cEnd !== undefined && cStart !== -1 && cEnd !== -1 && cEnd > cStart) {
 						const colEl = activeDocument.createElement('div');
 						colEl.className = `pdf-col pdf-col-${colIdx}`;
+						const colStyle = colStyles[colIdx];
+						if (colStyle) {
+							colEl.style.cssText += ';' + colStyle;
+						}
 						const colElements = children.slice(cStart + 1, cEnd);
 						for (const el of colElements) {
 							if (el) colEl.appendChild(el);
