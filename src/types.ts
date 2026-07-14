@@ -2,6 +2,8 @@ export const VIEW_TYPE_PDF_PREVIEW = 'live-pdf-preview-view';
 
 export interface LivePdfPreviewSettings {
 	pageSize: string;
+	customPageWidth: number;
+	customPageHeight: number;
 	landscape: boolean;
 	margin: string;
 	scale: number;
@@ -14,6 +16,8 @@ export interface LivePdfPreviewSettings {
 
 export const DEFAULT_SETTINGS: LivePdfPreviewSettings = {
 	pageSize: 'A4',
+	customPageWidth: 210,
+	customPageHeight: 297,
 	landscape: false,
 	margin: '20mm',
 	scale: 100,
@@ -27,6 +31,8 @@ export const DEFAULT_SETTINGS: LivePdfPreviewSettings = {
 export interface ExportConfig {
 	previewContainer: HTMLDivElement;
 	pageSize: string;
+	customPageWidth: number;
+	customPageHeight: number;
 	landscape: boolean;
 	scale: number;
 	currentFile: { basename: string };
@@ -43,7 +49,7 @@ export interface PaginationConfig {
 export interface ElectronWebContents {
 	printToPDF(options: {
 		marginsType: number;
-		pageSize: string;
+		pageSize: string | { widthInMicrons: number; heightInMicrons: number };
 		printBackground: boolean;
 		landscape: boolean;
 		scale: number;
