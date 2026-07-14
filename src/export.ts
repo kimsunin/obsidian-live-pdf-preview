@@ -1,4 +1,4 @@
-import { App, Modal, Notice, Setting, DropdownComponent, SliderComponent, ToggleComponent, ColorComponent, debounce } from 'obsidian';
+import { App, Modal, Notice, Setting, DropdownComponent, SliderComponent, ToggleComponent, ColorComponent, TextComponent, debounce } from 'obsidian';
 import { PDFDocument } from 'pdf-lib';
 import { addOutline } from './pdf-outline';
 import type { PdfPreviewView } from './view';
@@ -66,6 +66,8 @@ export abstract class BasePreviewModal extends Modal {
 
 export class ExportPdfModal extends BasePreviewModal {
 	private originalPageSize!: string;
+	private originalCustomWidth!: number;
+	private originalCustomHeight!: number;
 	private originalMargin!: string;
 	private originalScale!: number;
 	private originalLandscape!: boolean;
@@ -73,6 +75,8 @@ export class ExportPdfModal extends BasePreviewModal {
 
 	saveOriginals() {
 		this.originalPageSize = this.view.pageSize;
+		this.originalCustomWidth = this.view.customPageWidth;
+		this.originalCustomHeight = this.view.customPageHeight;
 		this.originalMargin = this.view.margin;
 		this.originalScale = this.view.scale;
 		this.originalLandscape = this.view.landscape;
@@ -81,6 +85,8 @@ export class ExportPdfModal extends BasePreviewModal {
 
 	restoreOriginals() {
 		this.view.pageSize = this.originalPageSize;
+		this.view.customPageWidth = this.originalCustomWidth;
+		this.view.customPageHeight = this.originalCustomHeight;
 		this.view.margin = this.originalMargin;
 		this.view.scale = this.originalScale;
 		this.view.landscape = this.originalLandscape;
@@ -96,10 +102,17 @@ export class ExportPdfModal extends BasePreviewModal {
 		this.titleEl.setText('Page settings');
 
 		let sizeDropdown!: DropdownComponent;
+		let customSizeSetting!: Setting;
+		let customWidthInput!: TextComponent;
+		let customHeightInput!: TextComponent;
 		let marginDropdown!: DropdownComponent;
 		let scaleSlider!: SliderComponent;
 		let landscapeToggle!: ToggleComponent;
 		let showTitleToggle!: ToggleComponent;
+
+		const updateCustomSizeVisibility = () => {
+			customSizeSetting.settingEl.style.display = this.view.pageSize === 'Custom' ? '' : 'none';
+		};
 
 		new Setting(contentEl)
 			.setName('Page size')
@@ -111,14 +124,45 @@ export class ExportPdfModal extends BasePreviewModal {
 						'Letter': 'Letter',
 						'A3': 'A3',
 						'A5': 'A5',
-						'Legal': 'Legal'
+						'Legal': 'Legal',
+						'Custom': 'Custom'
 					})
 					.setValue(this.view.pageSize)
 					.onChange(value => {
 						this.view.pageSize = value;
+						updateCustomSizeVisibility();
 						this.view.updateLayoutSettings(true);
 					});
 			});
+
+		customSizeSetting = new Setting(contentEl)
+			.setName('Custom size')
+			.setDesc('Page dimensions in millimeters')
+			.addText(text => {
+				customWidthInput = text;
+				text.setPlaceholder('Width')
+					.setValue(String(this.view.customPageWidth))
+					.onChange(value => {
+						const num = Math.min(2000, Math.max(10, parseInt(value, 10) || 0));
+						this.view.customPageWidth = num;
+						this.view.updateLayoutSettings(true);
+					});
+				text.inputEl.setCssProps({ width: '70px' });
+			})
+			.addText(text => {
+				text.inputEl.insertAdjacentText('beforebegin', ' mm ');
+				text.setPlaceholder('Height')
+					.setValue(String(this.view.customPageHeight))
+					.onChange(value => {
+						const num = Math.min(2000, Math.max(10, parseInt(value, 10) || 0));
+						this.view.customPageHeight = num;
+						this.view.updateLayoutSettings(true);
+					});
+				text.inputEl.setCssProps({ width: '70px' });
+				customHeightInput = text;
+				text.inputEl.insertAdjacentText('afterend', ' mm');
+			});
+		updateCustomSizeVisibility();
 
 		new Setting(contentEl)
 			.setName('Margins')
@@ -180,19 +224,24 @@ export class ExportPdfModal extends BasePreviewModal {
 			contentEl,
 			() => {
 				this.view.pageSize = 'A4';
+				this.view.customPageWidth = 210;
+				this.view.customPageHeight = 297;
 				this.view.margin = '20mm';
 				this.view.scale = 100;
 				this.view.landscape = false;
-				
+
 				const showTitleChanged = this.view.showTitle !== true;
 				this.view.showTitle = true;
 
 				sizeDropdown.setValue('A4');
+				customWidthInput.setValue('210');
+				customHeightInput.setValue('297');
+				updateCustomSizeVisibility();
 				marginDropdown.setValue('20mm');
 				scaleSlider.setValue(100);
 				landscapeToggle.setValue(false);
 				showTitleToggle.setValue(true);
-				
+
 				if (showTitleChanged) {
 					this.view.cachedUpperText = '';
 					void this.view.renderFull(true);
@@ -201,6 +250,8 @@ export class ExportPdfModal extends BasePreviewModal {
 			},
 			() => {
 				this.view.plugin.settings.pageSize = this.view.pageSize;
+				this.view.plugin.settings.customPageWidth = this.view.customPageWidth;
+				this.view.plugin.settings.customPageHeight = this.view.customPageHeight;
 				this.view.plugin.settings.margin = this.view.margin;
 				this.view.plugin.settings.scale = this.view.scale;
 				this.view.plugin.settings.landscape = this.view.landscape;
@@ -374,7 +425,7 @@ export class QuickStyleModal extends BasePreviewModal {
 
 
 export async function exportToPdf(config: ExportConfig) {
-	const { previewContainer, pageSize, landscape, scale, currentFile } = config;
+	const { previewContainer, pageSize, customPageWidth, customPageHeight, landscape, scale, currentFile } = config;
 
 	new Notice('Preparing PDF export...');
 
@@ -467,9 +518,15 @@ export async function exportToPdf(config: ExportConfig) {
 		});
 
 		// 2. Call printToPDF
+		// Standard sizes: pass the name string (Chromium knows the exact dimensions).
+		// Custom sizes: pass an object with width/height in INCHES (1 inch = 25.4 mm).
+		// Note: printToPDF's object form uses inches, unlike print() which uses microns.
+		const pageSizeOption = pageSize === 'Custom'
+			? { width: customPageWidth / 25.4, height: customPageHeight / 25.4 }
+			: pageSize;
 		const options = {
 			marginsType: 1, // no margins
-			pageSize,
+			pageSize: pageSizeOption,
 			printBackground: true,
 			landscape,
 			scale: scale / 100,

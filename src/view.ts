@@ -28,6 +28,8 @@ export class PdfPreviewView extends ItemView {
 	private currentFile: TFile | null = null;
 
 	public pageSize = 'A4';
+	public customPageWidth = 210;
+	public customPageHeight = 297;
 	public landscape = false;
 	public margin = '20mm';
 	public scale = 100;
@@ -47,6 +49,8 @@ export class PdfPreviewView extends ItemView {
 	private pendingRender = false;
 
 	private prevPageSize = '';
+	private prevCustomWidth = -1;
+	private prevCustomHeight = -1;
 	private prevMargin = '';
 	private prevScale = -1;
 	private prevLandscape = false;
@@ -66,13 +70,17 @@ export class PdfPreviewView extends ItemView {
 		
 		// Initialize settings from plugin
 		this.pageSize = this.plugin.settings.pageSize;
+		this.customPageWidth = this.plugin.settings.customPageWidth;
+		this.customPageHeight = this.plugin.settings.customPageHeight;
 		this.landscape = this.plugin.settings.landscape;
 		this.margin = this.plugin.settings.margin;
 		this.scale = this.plugin.settings.scale;
 		this.showTitle = this.plugin.settings.showTitle;
-		
+
 		// Initialize change tracking caches
 		this.prevPageSize = this.pageSize;
+		this.prevCustomWidth = this.customPageWidth;
+		this.prevCustomHeight = this.customPageHeight;
 		this.prevMargin = this.margin;
 		this.prevScale = this.scale;
 		this.prevLandscape = this.landscape;
@@ -630,7 +638,9 @@ export class PdfPreviewView extends ItemView {
 	}
 
 	private getPageDimensionsMm(): { width: number; height: number } {
-		const dim = (PAGE_DIMENSIONS[this.pageSize] || PAGE_DIMENSIONS.A4)!;
+		const dim = this.pageSize === 'Custom'
+			? { width: this.customPageWidth, height: this.customPageHeight }
+			: (PAGE_DIMENSIONS[this.pageSize] || PAGE_DIMENSIONS.A4)!;
 		if (this.landscape) {
 			return { width: dim.height, height: dim.width };
 		}
@@ -715,24 +725,28 @@ ${rawCss}
 
 	public updateLayoutSettings(resetScroll = false, forceResetScroll = false) {
 		const isPageSizeChanged = this.prevPageSize !== this.pageSize;
+		const isCustomWidthChanged = this.prevCustomWidth !== this.customPageWidth;
+		const isCustomHeightChanged = this.prevCustomHeight !== this.customPageHeight;
 		const isMarginChanged = this.prevMargin !== this.margin;
 		const isScaleChanged = this.prevScale !== this.scale;
 		const isLandscapeChanged = this.prevLandscape !== this.landscape;
-		
+
 		const currentFontSize = this.plugin.settings.fontSize || 16;
 		const isFontSizeChanged = this.prevFontSize !== currentFontSize;
-		
+
 		const currentFontFamily = this.plugin.settings.fontFamily || 'default';
 		const isFontFamilyChanged = this.prevFontFamily !== currentFontFamily;
-		
+
 		const currentTextColor = this.plugin.settings.textColor || 'default';
 		const isTextColorChanged = this.prevTextColor !== currentTextColor;
 
-		const isLayoutChanged = isPageSizeChanged || isMarginChanged || isScaleChanged || isLandscapeChanged || 
+		const isLayoutChanged = isPageSizeChanged || isCustomWidthChanged || isCustomHeightChanged || isMarginChanged || isScaleChanged || isLandscapeChanged ||
 		                         isFontSizeChanged || isFontFamilyChanged || isTextColorChanged;
 
 		// Update the change tracking caches
 		this.prevPageSize = this.pageSize;
+		this.prevCustomWidth = this.customPageWidth;
+		this.prevCustomHeight = this.customPageHeight;
 		this.prevMargin = this.margin;
 		this.prevScale = this.scale;
 		this.prevLandscape = this.landscape;
@@ -791,6 +805,8 @@ ${rawCss}
 		await exportToPdf({
 			previewContainer: this.previewContainer,
 			pageSize: this.pageSize,
+			customPageWidth: this.customPageWidth,
+			customPageHeight: this.customPageHeight,
 			landscape: this.landscape,
 			scale: this.scale,
 			currentFile: this.currentFile,
