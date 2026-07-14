@@ -3,7 +3,7 @@ import { PDFDocument } from 'pdf-lib';
 import { addOutline } from './pdf-outline';
 import type { PdfPreviewView } from './view';
 import type { ExportConfig, ElectronModule } from './types';
-import { FONT_DISPLAY_NAMES } from './types';
+import { FONT_DISPLAY_NAMES, PAGE_DIMENSIONS } from './types';
 
 export abstract class BasePreviewModal extends Modal {
 	protected view: PdfPreviewView;
@@ -136,31 +136,42 @@ export class ExportPdfModal extends BasePreviewModal {
 			});
 
 		customSizeSetting = new Setting(contentEl)
-			.setName('Custom size')
-			.setDesc('Page dimensions in millimeters')
+			.setName('Custom size (mm)')
+			.setDesc('Min: 148, max: 420')
 			.addText(text => {
 				customWidthInput = text;
+				text.inputEl.insertAdjacentText('beforebegin', 'width ');
 				text.setPlaceholder('Width')
 					.setValue(String(this.view.customPageWidth))
 					.onChange(value => {
-						const num = Math.min(2000, Math.max(10, parseInt(value, 10) || 0));
+						const num = parseInt(value, 10) || 0;
 						this.view.customPageWidth = num;
-						this.view.updateLayoutSettings(true);
 					});
 				text.inputEl.setCssProps({ width: '70px' });
 			})
 			.addText(text => {
-				text.inputEl.insertAdjacentText('beforebegin', ' mm ');
+				text.inputEl.insertAdjacentText('beforebegin', ' height ');
 				text.setPlaceholder('Height')
 					.setValue(String(this.view.customPageHeight))
 					.onChange(value => {
-						const num = Math.min(2000, Math.max(10, parseInt(value, 10) || 0));
+						const num = parseInt(value, 10) || 0;
 						this.view.customPageHeight = num;
-						this.view.updateLayoutSettings(true);
 					});
 				text.inputEl.setCssProps({ width: '70px' });
 				customHeightInput = text;
-				text.inputEl.insertAdjacentText('afterend', ' mm');
+			})
+			.addButton(button => {
+				button.setButtonText('Apply')
+					.setCta()
+					.onClick(() => {
+						const parsedWidth = Math.min(420, Math.max(148, parseInt(customWidthInput.getValue(), 10) || 148));
+						const parsedHeight = Math.min(420, Math.max(148, parseInt(customHeightInput.getValue(), 10) || 297));
+						customWidthInput.setValue(String(parsedWidth));
+						customHeightInput.setValue(String(parsedHeight));
+						this.view.customPageWidth = parsedWidth;
+						this.view.customPageHeight = parsedHeight;
+						this.view.updateLayoutSettings(true);
+					});
 			});
 		updateCustomSizeVisibility();
 
@@ -249,6 +260,13 @@ export class ExportPdfModal extends BasePreviewModal {
 				this.view.updateLayoutSettings(true);
 			},
 			() => {
+				const parsedWidth = Math.min(420, Math.max(148, parseInt(customWidthInput.getValue(), 10) || 148));
+				const parsedHeight = Math.min(420, Math.max(148, parseInt(customHeightInput.getValue(), 10) || 297));
+				customWidthInput.setValue(String(parsedWidth));
+				customHeightInput.setValue(String(parsedHeight));
+				this.view.customPageWidth = parsedWidth;
+				this.view.customPageHeight = parsedHeight;
+
 				this.view.plugin.settings.pageSize = this.view.pageSize;
 				this.view.plugin.settings.customPageWidth = this.view.customPageWidth;
 				this.view.plugin.settings.customPageHeight = this.view.customPageHeight;
@@ -445,12 +463,22 @@ export async function exportToPdf(config: ExportConfig) {
 		printClone.classList.add('pdf-print-clone');
 		printClone.id = 'pdf-preview-sandbox'; // Ensure sandbox scoped CSS applies to the clone and its children
 
+		const dims = pageSize === 'Custom'
+			? { width: customPageWidth, height: customPageHeight }
+			: (PAGE_DIMENSIONS[pageSize] || { width: 210, height: 297 });
+		const printWidth = landscape ? dims.height : dims.width;
+		const printHeight = landscape ? dims.width : dims.height;
+
 		// Inject a temporary stylesheet to override Obsidian's print layouts.
 		// This uses !important to successfully beat default layouts/dark themes without triggering linter warnings in styles.css.
 		const printStyle = activeDocument.createElement('style');
 		printStyle.id = 'pdf-dynamic-print-style';
 		printStyle.textContent = `
 			@media print {
+				@page {
+					size: ${printWidth}mm ${printHeight}mm;
+					margin: 0;
+				}
 				body.pdf-export-printing {
 					background-color: #ffffff !important;
 					background: #ffffff !important;
@@ -525,6 +553,7 @@ export async function exportToPdf(config: ExportConfig) {
 		const options = {
 			marginsType: 1, // no margins
 			pageSize: pageSizeOption,
+			preferCSSPageSize: true,
 			printBackground: true,
 			landscape,
 			scale: scale / 100,
