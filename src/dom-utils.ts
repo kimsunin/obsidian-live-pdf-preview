@@ -18,7 +18,9 @@ export function groupColumns(container: HTMLElement) {
 			i++;
 			continue;
 		}
-		if (child.textContent?.trim() === '//column') {
+		// Opening marker, optionally with column ratios: '//column' or '//column[30, 70]'
+		const openMatch = child.textContent?.trim().match(/^\/\/column(?:\[([^\]]+)\])?$/);
+		if (openMatch) {
 			let closeIndex = -1;
 			for (let j = i + 1; j < children.length; j++) {
 				const nextEl = children[j];
@@ -32,23 +34,35 @@ export function groupColumns(container: HTMLElement) {
 				const rowEl = activeDocument.createElement('div');
 				rowEl.className = 'pdf-row';
 
+				// Width ratios from the opening marker, in column order.
+				// Any malformed part invalidates the whole list (columns fall back to equal widths).
+				const ratios: number[] = [];
+				if (openMatch[1]) {
+					for (const part of openMatch[1].split(',')) {
+						const n = parseFloat(part.trim().replace(/%$/, ''));
+						if (isFinite(n) && n > 0) {
+							ratios.push(n);
+						} else {
+							ratios.length = 0;
+							break;
+						}
+					}
+				}
+
 				// Support columns 1, 2, and 3
 				const colStarts = [-1, -1, -1, -1];
 				const colEnds = [-1, -1, -1, -1];
-				// Optional inline CSS from the opening marker: //column-N[flex:0 0 40%]
-				const colStyles: (string | null)[] = [null, null, null, null];
 
 				for (let j = i + 1; j < closeIndex; j++) {
 					const subChild = children[j];
 					if (subChild) {
 						const text = subChild.textContent?.trim();
-						const colMatch = text?.match(/^\/\/column-(\d+)(?:\[([^\]]+)\])?$/);
+						const colMatch = text?.match(/^\/\/column-(\d+)$/);
 						if (colMatch && colMatch[1]) {
 							const colIdx = parseInt(colMatch[1], 10);
 							if (colIdx >= 1 && colIdx <= 3) {
 								if (colStarts[colIdx] === -1) {
 									colStarts[colIdx] = j;
-									colStyles[colIdx] = colMatch[2] ?? null;
 								} else {
 									colEnds[colIdx] = j;
 								}
@@ -64,9 +78,9 @@ export function groupColumns(container: HTMLElement) {
 					if (cStart !== undefined && cEnd !== undefined && cStart !== -1 && cEnd !== -1 && cEnd > cStart) {
 						const colEl = activeDocument.createElement('div');
 						colEl.className = `pdf-col pdf-col-${colIdx}`;
-						const colStyle = colStyles[colIdx];
-						if (colStyle) {
-							colEl.style.cssText += ';' + colStyle;
+						const ratio = ratios[colIdx - 1];
+						if (ratio !== undefined) {
+							colEl.style.flex = String(ratio);
 						}
 						const colElements = children.slice(cStart + 1, cEnd);
 						for (const el of colElements) {

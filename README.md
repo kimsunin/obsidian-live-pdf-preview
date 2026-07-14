@@ -41,7 +41,7 @@ The plugin provides native layout commands written on their own lines:
   
 - **`//column` (Multi-Column Layout):** Creates side-by-side columns (up to 3 columns using `//column-1`, `//column-2`, `//column-3`). Includes smart autocomplete for closing tags.
 
-  Column markers accept optional inline CSS in square brackets on the opening marker, applied to that column's container — e.g. `//column-1[flex:0 0 32%]` for a fixed-width column. Since columns are flex items with `flex: 1`, use `flex: 0 0 <width>` (not `width:`) to size a column.
+  The opening marker accepts optional width ratios: `//column[30, 70]` makes the first column 30/100 wide and the second 70/100. Ratios map to columns in order (`//column-1`, `//column-2`, `//column-3`); columns without a ratio share the remaining space equally. The closing marker stays a bare `//column`.
   
   ![Multi Column Layout Screenshot](./assets/2026-06-30_multi_layout.png)
   

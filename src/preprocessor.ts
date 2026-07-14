@@ -73,7 +73,7 @@ export function fixColumnLines(text: string): string {
 		const line = lines[i];
 		if (line !== undefined) {
 			const trimmed = line.trim();
-			if (trimmed === '//column' || trimmed === '//center' || /^\/\/column-\d+(?:\[[^\]]+\])?$/.test(trimmed)) {
+			if (trimmed === '//column' || trimmed === '//center' || /^\/\/column-\d+$/.test(trimmed) || /^\/\/column\[[^\]]+\]$/.test(trimmed)) {
 				if (i > 0 && lines[i - 1]?.trim() !== '') {
 					lines.splice(i, 0, '');
 					i++;
@@ -157,7 +157,16 @@ export function isInsideBlock(lines: string[], targetLineIndex: number, marker: 
 }
 
 export function isInsideColumnBlock(lines: string[], targetLineIndex: number): boolean {
-	return isInsideBlock(lines, targetLineIndex, '//column');
+	// The opening marker may carry ratios ('//column[30, 70]'), the closing one is always bare,
+	// so toggle on both forms rather than on exact text.
+	let inside = false;
+	for (let i = 0; i <= targetLineIndex; i++) {
+		const line = lines[i];
+		if (line !== undefined && /^\/\/column(?:\[[^\]]+\])?$/.test(line.trim())) {
+			inside = !inside;
+		}
+	}
+	return inside;
 }
 
 export function isInsideCenterBlock(lines: string[], targetLineIndex: number): boolean {
