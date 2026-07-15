@@ -586,25 +586,40 @@ export class PdfPreviewView extends ItemView {
 				const prevLineContent = editor.getLine(lineNum - 1);
 				const prevTrimmed = prevLineContent.trim();
 				
-				// Match '//column', '//center', or '//column-N' (where N is a digit)
-				if (prevTrimmed === '//column' || prevTrimmed === '//center' || /^\/\/column-\d+$/.test(prevTrimmed)) {
+				// Match '//column', '//center', '//column-N' (where N is a digit),
+				// or a ratio opening marker like '//column[30, 70]'
+				const isRatioOpen = /^\/\/column\[[^\]]+\]$/.test(prevTrimmed);
+				if (prevTrimmed === '//column' || prevTrimmed === '//center' || isRatioOpen || /^\/\/column-\d+$/.test(prevTrimmed)) {
 					const currentLineContent = editor.getLine(lineNum);
 					if (currentLineContent.trim() === '') {
-						// Count occurrences in the entire document to see if a closing tag already exists
-						const occurrence = this.getOccurrenceCount(editor, prevTrimmed, editor.lineCount() - 1);
-						
+						// A ratio opener closes with a bare '//column', so for the '//column' family
+						// pair parity is counted across both forms rather than by exact text.
+						const closingText = isRatioOpen ? '//column' : prevTrimmed;
+						let occurrence: number;
+						if (isRatioOpen || prevTrimmed === '//column') {
+							occurrence = 0;
+							for (let i = 0; i < editor.lineCount(); i++) {
+								const line = editor.getLine(i);
+								if (line !== undefined && /^\/\/column(?:\[[^\]]+\])?$/.test(line.trim())) {
+									occurrence++;
+								}
+							}
+						} else {
+							occurrence = this.getOccurrenceCount(editor, prevTrimmed, editor.lineCount() - 1);
+						}
+
 						// If the total count in the document is odd, it means there is an unmatched opening tag.
 						// We only autocomplete when the total count is odd.
 						if (occurrence % 2 === 1) {
-							// Autocomplete only if the next line does not already have this exact tag
+							// Autocomplete only if the next line does not already have the closing tag
 							const nextLine = lineNum + 1 < editor.lineCount() ? editor.getLine(lineNum + 1) : '';
-							if (nextLine.trim() !== prevTrimmed) {
+							if (nextLine.trim() !== closingText) {
 								this.isAutocompleting = true;
 								editor.replaceRange(
-									`\n${prevTrimmed}`,
+									`\n${closingText}`,
 									{ line: lineNum, ch: 0 }
 								);
-								
+
 								// Keep the cursor on the current empty line
 								editor.setCursor({ line: lineNum, ch: 0 });
 							}

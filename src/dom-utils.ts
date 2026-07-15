@@ -18,7 +18,9 @@ export function groupColumns(container: HTMLElement) {
 			i++;
 			continue;
 		}
-		if (child.textContent?.trim() === '//column') {
+		// Opening marker, optionally with column ratios: '//column' or '//column[30, 70]'
+		const openMatch = child.textContent?.trim().match(/^\/\/column(?:\[([^\]]+)\])?$/);
+		if (openMatch) {
 			let closeIndex = -1;
 			for (let j = i + 1; j < children.length; j++) {
 				const nextEl = children[j];
@@ -31,6 +33,21 @@ export function groupColumns(container: HTMLElement) {
 			if (closeIndex !== -1) {
 				const rowEl = activeDocument.createElement('div');
 				rowEl.className = 'pdf-row';
+
+				// Width ratios from the opening marker, in column order.
+				// Any malformed part invalidates the whole list (columns fall back to equal widths).
+				const ratios: number[] = [];
+				if (openMatch[1]) {
+					for (const part of openMatch[1].split(',')) {
+						const n = parseFloat(part.trim().replace(/%$/, ''));
+						if (isFinite(n) && n > 0) {
+							ratios.push(n);
+						} else {
+							ratios.length = 0;
+							break;
+						}
+					}
+				}
 
 				// Support columns 1, 2, and 3
 				const colStarts = [-1, -1, -1, -1];
@@ -61,6 +78,10 @@ export function groupColumns(container: HTMLElement) {
 					if (cStart !== undefined && cEnd !== undefined && cStart !== -1 && cEnd !== -1 && cEnd > cStart) {
 						const colEl = activeDocument.createElement('div');
 						colEl.className = `pdf-col pdf-col-${colIdx}`;
+						const ratio = ratios[colIdx - 1];
+						if (ratio !== undefined) {
+							colEl.style.flex = String(ratio);
+						}
 						const colElements = children.slice(cStart + 1, cEnd);
 						for (const el of colElements) {
 							if (el) colEl.appendChild(el);
