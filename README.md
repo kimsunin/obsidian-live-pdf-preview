@@ -36,14 +36,13 @@ It streamlines your writing workflow by combining document editing and publicati
 The plugin provides native layout commands written on their own lines:
 
 - **`//page` (Page Break):** Forces content onto a new page. Inside a column, it splits only that column.
-  
-  ![Page Break Screenshot](./assets/2026-06-30_paging.png)
+
+    ![Page Break Screenshot](./assets/2026-06-30_paging.png)
   
 - **`//column` (Multi-Column Layout):** Creates side-by-side columns (up to 3 columns using `//column-1`, `//column-2`, `//column-3`). Includes smart autocomplete for closing tags.
+    - **Custom Widths:** Specify ratios in brackets, e.g., `//column[30, 70]` to set custom column width ratios.
 
-  The opening marker accepts optional width ratios: `//column[30, 70]` makes the first column 30/100 wide and the second 70/100. Ratios map to columns in order (`//column-1`, `//column-2`, `//column-3`); columns without a ratio share the remaining space equally. The closing marker stays a bare `//column`.
-  
-  ![Multi Column Layout Screenshot](./assets/2026-06-30_multi_layout.png)
+    ![Multi Column Layout Screenshot](./assets/2026-06-30_multi_layout.png)
   
 - **`//center` (Center Alignment):** Centers text, lists, tables, code blocks, and images, while keeping list items left-aligned for readability. Includes smart autocomplete.
 
