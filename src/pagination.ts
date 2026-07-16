@@ -69,7 +69,7 @@ export function applyPageBreaks(upperEl: HTMLDivElement, lowerEl: HTMLDivElement
 		const paragraphs = Array.from(section.querySelectorAll('p'));
 		for (const p of paragraphs) {
 			if (/^\s*\/\/page\s*$/.test(p.textContent || '')) {
-				const breakEl = activeDocument.createElement('div');
+				const breakEl = createDiv();
 				breakEl.className = 'pdf-page-break';
 				p.replaceWith(breakEl);
 			}
@@ -81,7 +81,7 @@ export function applyPageBreaks(upperEl: HTMLDivElement, lowerEl: HTMLDivElement
  * Converts mm to pixels based on current display scaling/zoom.
  */
 export function measurePx(mm: number): number {
-	const temp = activeDocument.createElement('div');
+	const temp = createDiv();
 	temp.style.cssText = `height: ${mm}mm; position: absolute; visibility: hidden;`;
 	activeDocument.body.appendChild(temp);
 	const height = temp.offsetHeight;
@@ -221,7 +221,7 @@ export function splitElementAtOverflow(el: HTMLElement, maxContentBottom: number
 	range.setEnd(splitPoint.node, splitPoint.offset);
 	const firstPartFragment = range.extractContents();
 
-	const nextEl = activeDocument.createElement(el.tagName);
+	const nextEl = createEl(el.tagName.toLowerCase() as keyof HTMLElementTagNameMap);
 	nextEl.className = el.className;
 	nextEl.style.cssText = el.style.cssText;
 	nextEl.setAttribute('data-section', el.getAttribute('data-section') || '');
@@ -471,7 +471,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 				currentPage = createPageElement(previewContainer);
 
 				// Create the new row container for the next page (detached)
-				const nextRowEl = activeDocument.createElement('div');
+				const nextRowEl = createDiv();
 				nextRowEl.className = el.className;
 				nextRowEl.style.cssText = el.style.cssText;
 				nextRowEl.setAttribute('data-section', sectionAttr);
@@ -634,7 +634,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 			if (nextCenterElements.length > 0) {
 				currentPage = createPageElement(previewContainer);
 
-				const nextCenterEl = activeDocument.createElement('div');
+				const nextCenterEl = createDiv();
 				nextCenterEl.className = el.className;
 				nextCenterEl.style.cssText = el.style.cssText;
 				nextCenterEl.setAttribute('data-section', sectionAttr);
@@ -739,7 +739,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 			if (nextBodyRows.length > 0) {
 				currentPage = createPageElement(previewContainer);
 
-				const nextTable = activeDocument.createElement('table');
+				const nextTable = createEl('table');
 				nextTable.className = el.className;
 				nextTable.style.cssText = el.style.cssText;
 				nextTable.setAttribute('data-section', sectionAttr);
@@ -885,13 +885,13 @@ export function applyVirtualPagination(config: PaginationConfig) {
 
 function getOrCreateNextListContainer(overflowList: HTMLElement[] | undefined, listType: string, originalList: HTMLElement, sectionAttr: string): HTMLElement {
 	if (!overflowList) {
-		return activeDocument.createElement(listType);
+		return createEl(listType.toLowerCase() as keyof HTMLElementTagNameMap);
 	}
 	const lastEl = overflowList.length > 0 ? overflowList[overflowList.length - 1] : null;
 	if (lastEl && lastEl.tagName.toLowerCase() === listType) {
 		return lastEl;
 	}
-	const nextListContainer = activeDocument.createElement(listType);
+	const nextListContainer = createEl(listType.toLowerCase() as keyof HTMLElementTagNameMap);
 	nextListContainer.className = originalList.className;
 	nextListContainer.style.cssText = originalList.style.cssText;
 	nextListContainer.setAttribute('data-section', sectionAttr);
@@ -979,13 +979,13 @@ function getOrCreateNextTableContainer(
 	sectionAttr: string
 ): HTMLElement {
 	if (!overflowList) {
-		return activeDocument.createElement('table');
+		return createEl('table');
 	}
 	const lastEl = overflowList.length > 0 ? overflowList[overflowList.length - 1] : null;
 	if (lastEl && lastEl.tagName.toLowerCase() === 'table') {
 		return lastEl;
 	}
-	const nextTable = activeDocument.createElement('table');
+	const nextTable = createEl('table');
 	nextTable.className = originalTable.className;
 	nextTable.style.cssText = originalTable.style.cssText;
 	nextTable.setAttribute('data-section', sectionAttr);

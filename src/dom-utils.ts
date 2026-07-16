@@ -31,7 +31,7 @@ export function groupColumns(container: HTMLElement) {
 			}
 
 			if (closeIndex !== -1) {
-				const rowEl = activeDocument.createElement('div');
+				const rowEl = createDiv();
 				rowEl.className = 'pdf-row';
 
 				// Width ratios from the opening marker, in column order.
@@ -76,7 +76,7 @@ export function groupColumns(container: HTMLElement) {
 					const cStart = colStarts[colIdx];
 					const cEnd = colEnds[colIdx];
 					if (cStart !== undefined && cEnd !== undefined && cStart !== -1 && cEnd !== -1 && cEnd > cStart) {
-						const colEl = activeDocument.createElement('div');
+						const colEl = createDiv();
 						colEl.className = `pdf-col pdf-col-${colIdx}`;
 						const ratio = ratios[colIdx - 1];
 						if (ratio !== undefined) {
@@ -125,7 +125,7 @@ export function groupCenterBlocks(container: HTMLElement) {
 			}
 
 			if (closeIndex !== -1) {
-				const centerEl = activeDocument.createElement('div');
+				const centerEl = createDiv();
 				centerEl.className = 'pdf-center-block';
 
 				const contentElements = children.slice(i + 1, closeIndex);

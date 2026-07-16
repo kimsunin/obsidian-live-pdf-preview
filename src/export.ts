@@ -471,7 +471,7 @@ export async function exportToPdf(config: ExportConfig) {
 
 		// Inject a temporary stylesheet to override Obsidian's print layouts.
 		// This uses !important to successfully beat default layouts/dark themes without triggering linter warnings in styles.css.
-		const printStyle = activeDocument.createElement('style');
+		const printStyle = createEl('style');
 		printStyle.id = 'pdf-dynamic-print-style';
 		printStyle.textContent = `
 			@media print {
@@ -593,7 +593,7 @@ export async function exportToPdf(config: ExportConfig) {
 		// 6. Save the file using standard Web Blob download trigger
 		const blob = new Blob([finalPdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' });
 		const url = URL.createObjectURL(blob);
-		const downloadLink = activeDocument.createElement('a');
+		const downloadLink = createEl('a');
 		downloadLink.href = url;
 		downloadLink.download = `${currentFile.basename}.pdf`;
 		activeDocument.body.appendChild(downloadLink);

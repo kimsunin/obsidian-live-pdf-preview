@@ -337,7 +337,7 @@ export class PdfPreviewView extends ItemView {
 
 		const currentWrappers = Array.from(this.activeContainer.querySelectorAll('.pdf-page-wrapper'));
 		if (currentWrappers.length > 0) {
-			const originalHolder = activeDocument.createElement('div');
+			const originalHolder = createDiv();
 			for (const w of currentWrappers) {
 				// Clone the wrapper and its contents to use for offscreen restoration,
 				// leaving the visible DOM nodes in activeContainer completely untouched.
