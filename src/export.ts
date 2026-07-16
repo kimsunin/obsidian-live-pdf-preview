@@ -137,7 +137,7 @@ export class ExportPdfModal extends BasePreviewModal {
 
 		customSizeSetting = new Setting(contentEl)
 			.setName('Custom size (mm)')
-			.setDesc('Min: 148, max: 420')
+			.setDesc('Min: 120mm')
 			.addText(text => {
 				customWidthInput = text;
 				text.inputEl.insertAdjacentText('beforebegin', 'width ');
@@ -164,8 +164,8 @@ export class ExportPdfModal extends BasePreviewModal {
 				button.setButtonText('Apply')
 					.setCta()
 					.onClick(() => {
-						const parsedWidth = Math.min(420, Math.max(148, parseInt(customWidthInput.getValue(), 10) || 148));
-						const parsedHeight = Math.min(420, Math.max(148, parseInt(customHeightInput.getValue(), 10) || 297));
+						const parsedWidth = Math.max(120, parseInt(customWidthInput.getValue(), 10) || 120);
+						const parsedHeight = Math.max(120, parseInt(customHeightInput.getValue(), 10) || 297);
 						customWidthInput.setValue(String(parsedWidth));
 						customHeightInput.setValue(String(parsedHeight));
 						this.view.customPageWidth = parsedWidth;
@@ -260,8 +260,8 @@ export class ExportPdfModal extends BasePreviewModal {
 				this.view.updateLayoutSettings(true);
 			},
 			() => {
-				const parsedWidth = Math.min(420, Math.max(148, parseInt(customWidthInput.getValue(), 10) || 148));
-				const parsedHeight = Math.min(420, Math.max(148, parseInt(customHeightInput.getValue(), 10) || 297));
+				const parsedWidth = Math.max(120, parseInt(customWidthInput.getValue(), 10) || 120);
+				const parsedHeight = Math.max(120, parseInt(customHeightInput.getValue(), 10) || 297);
 				customWidthInput.setValue(String(parsedWidth));
 				customHeightInput.setValue(String(parsedHeight));
 				this.view.customPageWidth = parsedWidth;
