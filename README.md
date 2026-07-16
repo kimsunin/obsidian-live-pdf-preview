@@ -66,13 +66,13 @@ The plugin provides native layout commands written on their own lines:
 
 Click the gear icon (⚙️) on the top right of the preview header to open the page settings:
 
-| Setting | Description | Options |
-| :--- | :--- | :--- |
-| **Page size** | Set the physical dimensions of the virtual page. | A4, Letter, A3, A5, Legal |
-| **Margins** | Choose the outer padding margins for the A4 sheet. | Default (20mm), None (0mm), Small (10mm) |
-| **Downscale percent** | Adjust the zoom/scale factor of the preview text and layout. | 50% to 150% (Default: 100%) |
-| **Landscape** | Toggle between Portrait (vertical) and Landscape (horizontal). | Toggle ON/OFF |
-| **Show file name as title** | Render the file name as the document's main heading. | Toggle ON/OFF |
+| Setting                     | Description                                                    | Options                                  |
+| :-------------------------- | :------------------------------------------------------------- | :--------------------------------------- |
+| **Page size**               | Set the physical dimensions of the virtual page.               | A4, Letter, A3, A5, Legal, Custom        |
+| **Margins**                 | Choose the outer padding margins for the A4 sheet.             | Default (20mm), None (0mm), Small (10mm) |
+| **Downscale percent**       | Adjust the zoom/scale factor of the preview text and layout.   | 50% to 150% (Default: 100%)              |
+| **Landscape**               | Toggle between Portrait (vertical) and Landscape (horizontal). | Toggle ON/OFF                            |
+| **Show file name as title** | Render the file name as the document's main heading.           | Toggle ON/OFF                            |
 
 ![Page Layout Settings Modal](./assets/2026-06-30_setting.png)
 
