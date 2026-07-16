@@ -107,11 +107,11 @@ export class PdfPreviewView extends ItemView {
 		container.id = 'pdf-preview-sandbox';
 
 		// Create header (Obsidian native style)
-		const headerEl = container.createEl('div', {
+		const headerEl = container.createDiv({
 			cls: 'pdf-preview-header',
 		});
 
-		const actionsEl = headerEl.createEl('div', {
+		const actionsEl = headerEl.createDiv({
 			cls: 'pdf-preview-header-actions',
 		});
 
@@ -164,10 +164,10 @@ export class PdfPreviewView extends ItemView {
 		});
 
 		// Create Twin Preview Containers (Phase 7 Robust Flicker-free)
-		this.containerA = container.createEl('div', {
+		this.containerA = container.createDiv({
 			cls: 'pdf-preview-container is-active',
 		});
-		this.containerB = container.createEl('div', {
+		this.containerB = container.createDiv({
 			cls: 'pdf-preview-container is-inactive',
 		});
 
@@ -195,13 +195,13 @@ export class PdfPreviewView extends ItemView {
 		});
 
 		// Create the master render container (hidden offscreen)
-		this.masterContainer = container.createEl('div', {
+		this.masterContainer = container.createDiv({
 			cls: 'pdf-preview-master',
 		});
 
 		// Upper and lower sections for partial rendering (Phase 3)
-		this.upperEl = this.masterContainer.createEl('div');
-		this.lowerEl = this.masterContainer.createEl('div');
+		this.upperEl = this.masterContainer.createDiv();
+		this.lowerEl = this.masterContainer.createDiv();
 
 		// Apply initial values
 		this.updateGuiCss();

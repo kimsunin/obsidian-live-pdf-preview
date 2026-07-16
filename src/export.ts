@@ -38,7 +38,7 @@ export abstract class BasePreviewModal extends Modal {
 		onReset: () => void,
 		onDone?: () => void
 	) {
-		const buttonContainer = contentEl.createEl('div', {
+		const buttonContainer = contentEl.createDiv({
 			cls: 'pdf-modal-button-container',
 			attr: { style: 'margin-top: 24px; display: flex; justify-content: flex-end; gap: 12px;' }
 		});
@@ -295,7 +295,7 @@ export class CustomCssModal extends BasePreviewModal {
 	buildContent(contentEl: HTMLElement) {
 		this.titleEl.setText('Custom CSS');
 
-		const textareaContainer = contentEl.createEl('div', {
+		const textareaContainer = contentEl.createDiv({
 			attr: { style: 'width: 100%; margin-bottom: 20px;' }
 		});
 

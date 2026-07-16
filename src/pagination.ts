@@ -93,10 +93,10 @@ export function measurePx(mm: number): number {
  * Creates a new page wrapper + page element in the preview container.
  */
 export function createPageElement(previewContainer: HTMLDivElement): HTMLDivElement {
-	const wrapper = previewContainer.createEl('div', {
+	const wrapper = previewContainer.createDiv({
 		cls: 'pdf-page-wrapper theme-light',
 	});
-	const page = wrapper.createEl('div', {
+	const page = wrapper.createDiv({
 		cls: 'pdf-preview-page markdown-preview-view markdown-rendered',
 	});
 	return page;
@@ -331,7 +331,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 			const sectionAttr = el.getAttribute('data-section') || '';
 
 			// Create the row container on the current page
-			const currentRowEl = currentPage.createEl('div');
+			const currentRowEl = currentPage.createDiv();
 			currentRowEl.className = el.className;
 			currentRowEl.style.cssText = el.style.cssText;
 			currentRowEl.setAttribute('data-section', sectionAttr);
@@ -340,7 +340,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 			const nextColElements: HTMLElement[][] = [];
 
 			columns.forEach((col, colIdx) => {
-				const currentColEl = currentRowEl.createEl('div');
+				const currentColEl = currentRowEl.createDiv();
 				currentColEl.className = col.className;
 				currentColEl.style.cssText = col.style.cssText;
 				currentColEls.push(currentColEl);
@@ -477,7 +477,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 				nextRowEl.setAttribute('data-section', sectionAttr);
 
 				columns.forEach((col, colIdx) => {
-					const nextColEl = nextRowEl.createEl('div');
+					const nextColEl = nextRowEl.createDiv();
 					nextColEl.className = col.className;
 					nextColEl.style.cssText = col.style.cssText;
 					
@@ -518,7 +518,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 			const sectionAttr = el.getAttribute('data-section') || '';
 
 			// Create the center container on the current page
-			const currentCenterEl = currentPage.createEl('div');
+			const currentCenterEl = currentPage.createDiv();
 			currentCenterEl.className = el.className;
 			currentCenterEl.style.cssText = el.style.cssText;
 			currentCenterEl.setAttribute('data-section', sectionAttr);
@@ -873,7 +873,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 			if (oldFooter) oldFooter.remove();
 
 			if (showPageNumbers) {
-				page.createEl('div', {
+				page.createDiv({
 					cls: 'pdf-page-number',
 					text: `${pageNum} / ${totalPages}`,
 				});
