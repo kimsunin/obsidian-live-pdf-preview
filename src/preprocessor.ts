@@ -186,3 +186,85 @@ export function findCutLine(text: string, cursorLine: number): number {
 	}
 	return 0;
 }
+
+export function processHideBlocks(text: string, cursorLine?: number): { text: string; cursorLine?: number } {
+	const lines = text.split('\n');
+	let inCodeBlock = false;
+	let inFrontmatter = false;
+	
+	if (lines.length > 0 && lines[0] !== undefined && lines[0].trim() === '---') {
+		inFrontmatter = true;
+	}
+
+	const hideIndices: number[] = [];
+
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i];
+		if (line === undefined) continue;
+		const trimmed = line.trim();
+
+		// Track YAML frontmatter
+		if (i > 0 && trimmed === '---') {
+			if (inFrontmatter) {
+				inFrontmatter = false;
+				continue;
+			}
+		}
+		if (inFrontmatter) {
+			continue;
+		}
+
+		// Track code blocks
+		if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) {
+			inCodeBlock = !inCodeBlock;
+			continue;
+		}
+		if (inCodeBlock) {
+			continue;
+		}
+
+		if (trimmed === '//hide') {
+			hideIndices.push(i);
+		}
+	}
+
+	// Pair up indices. If there is an odd number, the last one is unclosed and ignored.
+	const isHidden = new Array(lines.length).fill(false);
+	const pairCount = Math.floor(hideIndices.length / 2);
+	for (let k = 0; k < pairCount; k++) {
+		const start = hideIndices[k * 2];
+		const end = hideIndices[k * 2 + 1];
+		if (start !== undefined && end !== undefined) {
+			for (let i = start; i <= end; i++) {
+				isHidden[i] = true;
+			}
+		}
+	}
+
+	const resultLines: string[] = [];
+	let adjustedCursor = cursorLine;
+
+	for (let i = 0; i < lines.length; i++) {
+		if (isHidden[i]) {
+			if (cursorLine !== undefined) {
+				if (i < cursorLine) {
+					adjustedCursor = (adjustedCursor ?? 0) - 1;
+				} else if (i === cursorLine) {
+					adjustedCursor = resultLines.length;
+				}
+			}
+			continue;
+		}
+		resultLines.push(lines[i] as string);
+	}
+
+	// Safety clamp to ensure adjustedCursor is in bounds of the new lines array
+	if (adjustedCursor !== undefined) {
+		adjustedCursor = Math.max(0, Math.min(adjustedCursor, resultLines.length));
+	}
+
+	return {
+		text: resultLines.join('\n'),
+		cursorLine: adjustedCursor
+	};
+}

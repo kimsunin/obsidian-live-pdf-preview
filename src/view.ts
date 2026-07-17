@@ -4,7 +4,7 @@ import { restoreFromPages, applyPageBreaks, applyVirtualPagination } from './pag
 import { ExportPdfModal, CustomCssModal, QuickStyleModal, exportToPdf } from './export';
 import type LivePdfPreviewPlugin from './main';
 import { FONT_FAMILY_MAP, PAGE_DIMENSIONS, VIEW_TYPE_PDF_PREVIEW } from './types';
-import { processMarkdownIndentation, fixColumnLines, fixHorizontalRules, findCutLine } from './preprocessor';
+import { processMarkdownIndentation, fixColumnLines, fixHorizontalRules, findCutLine, processHideBlocks } from './preprocessor';
 import { groupColumns, groupCenterBlocks } from './dom-utils';
 
 export class PdfPreviewView extends ItemView {
@@ -442,6 +442,9 @@ export class PdfPreviewView extends ItemView {
 		let text = await this.app.vault.read(this.currentFile);
 		const sourcePath = this.currentFile.path;
 
+		// Preprocess hide blocks (remove paired //hide blocks)
+		text = processHideBlocks(text).text;
+
 		// Preprocess horizontal rules to guarantee at least 2 trailing empty lines for rendering safety
 		text = fixHorizontalRules(text).text;
 
@@ -502,6 +505,11 @@ export class PdfPreviewView extends ItemView {
 			let text = editor.getValue();
 			const sourcePath = this.currentFile.path;
 			let cursorLine = editor.getCursor().line;
+
+			// Preprocess hide blocks (remove paired //hide blocks and adjust cursorLine)
+			const hideProcessed = processHideBlocks(text, cursorLine);
+			text = hideProcessed.text;
+			cursorLine = hideProcessed.cursorLine ?? cursorLine;
 
 			// Preprocess horizontal rules to guarantee at least 2 trailing empty lines for rendering safety
 			const fixed = fixHorizontalRules(text, cursorLine);
@@ -589,7 +597,7 @@ export class PdfPreviewView extends ItemView {
 				// Match '//column', '//center', '//column-N' (where N is a digit),
 				// or a ratio opening marker like '//column[30, 70]'
 				const isRatioOpen = /^\/\/column\[[^\]]+\]$/.test(prevTrimmed);
-				if (prevTrimmed === '//column' || prevTrimmed === '//center' || isRatioOpen || /^\/\/column-\d+$/.test(prevTrimmed)) {
+				if (prevTrimmed === '//column' || prevTrimmed === '//center' || prevTrimmed === '//hide' || isRatioOpen || /^\/\/column-\d+$/.test(prevTrimmed)) {
 					const currentLineContent = editor.getLine(lineNum);
 					if (currentLineContent.trim() === '') {
 						// A ratio opener closes with a bare '//column', so for the '//column' family
