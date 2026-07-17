@@ -4,7 +4,7 @@ import { restoreFromPages, applyPageBreaks, applyVirtualPagination } from './pag
 import { ExportPdfModal, CustomCssModal, QuickStyleModal, exportToPdf } from './export';
 import type LivePdfPreviewPlugin from './main';
 import { FONT_FAMILY_MAP, PAGE_DIMENSIONS, VIEW_TYPE_PDF_PREVIEW } from './types';
-import { processMarkdownIndentation, fixColumnLines, fixHorizontalRules, findCutLine, processHideBlocks } from './preprocessor';
+import { processMarkdownIndentation, fixColumnLines, fixHorizontalRules, findCutLine, processHideBlocks, processBlankSpacers } from './preprocessor';
 import { groupColumns, groupCenterBlocks } from './dom-utils';
 
 export class PdfPreviewView extends ItemView {
@@ -445,6 +445,9 @@ export class PdfPreviewView extends ItemView {
 		// Preprocess hide blocks (remove paired //hide blocks)
 		text = processHideBlocks(text).text;
 
+		// Preprocess blank spacer blocks
+		text = processBlankSpacers(text);
+
 		// Preprocess horizontal rules to guarantee at least 2 trailing empty lines for rendering safety
 		text = fixHorizontalRules(text).text;
 
@@ -510,6 +513,9 @@ export class PdfPreviewView extends ItemView {
 			const hideProcessed = processHideBlocks(text, cursorLine);
 			text = hideProcessed.text;
 			cursorLine = hideProcessed.cursorLine ?? cursorLine;
+
+			// Preprocess blank spacer blocks (1:1 line replacement, no cursorLine change)
+			text = processBlankSpacers(text);
 
 			// Preprocess horizontal rules to guarantee at least 2 trailing empty lines for rendering safety
 			const fixed = fixHorizontalRules(text, cursorLine);

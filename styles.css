@@ -263,3 +263,12 @@
 	margin-left: 2em;
 	margin-right: 2em;
 }
+
+/* Custom blank spacer block (//blank[height]) */
+#pdf-preview-sandbox .pdf-blank-spacer {
+	display: block;
+	width: 100%;
+	background: transparent;
+	pointer-events: none;
+	box-sizing: border-box;
+}

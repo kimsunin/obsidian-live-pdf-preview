@@ -1,7 +1,7 @@
 // Markdown preprocessing functions for live-pdf-preview
 
-export function processMarkdownIndentation(text: string): string {
-	const lines = text.split('\n');
+export function getLineMetadata(lines: string[]): { isIgnored: boolean[] } {
+	const isIgnored = new Array<boolean>(lines.length).fill(false);
 	let inCodeBlock = false;
 	let inFrontmatter = false;
 	
@@ -9,22 +9,45 @@ export function processMarkdownIndentation(text: string): string {
 		inFrontmatter = true;
 	}
 
-	const processedLines = lines.map((line, index) => {
-		if (index > 0 && line.trim() === '---') {
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i];
+		if (line === undefined) continue;
+		const trimmed = line.trim();
+
+		// Track YAML frontmatter
+		if (i > 0 && trimmed === '---') {
 			if (inFrontmatter) {
 				inFrontmatter = false;
-				return line;
+				isIgnored[i] = true;
+				continue;
 			}
 		}
 		if (inFrontmatter) {
-			return line;
+			isIgnored[i] = true;
+			continue;
 		}
 
-		if (line.trim().startsWith('```') || line.trim().startsWith('~~~')) {
+		// Track code blocks
+		if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) {
 			inCodeBlock = !inCodeBlock;
-			return line;
+			isIgnored[i] = true;
+			continue;
 		}
 		if (inCodeBlock) {
+			isIgnored[i] = true;
+			continue;
+		}
+	}
+
+	return { isIgnored };
+}
+
+export function processMarkdownIndentation(text: string): string {
+	const lines = text.split('\n');
+	const { isIgnored } = getLineMetadata(lines);
+
+	const processedLines = lines.map((line, index) => {
+		if (isIgnored[index]) {
 			return line;
 		}
 
@@ -90,25 +113,10 @@ export function fixColumnLines(text: string): string {
 export function fixHorizontalRules(text: string, cursorLine?: number): { text: string; cursorLine?: number } {
 	const lines = text.split('\n');
 	let adjustedCursor = cursorLine;
-
-	// Check if document has YAML Frontmatter
-	let inFrontmatter = false;
-	let frontmatterEndIndex = -1;
-	if (lines.length > 0 && lines[0] !== undefined && lines[0].trim() === '---') {
-		inFrontmatter = true;
-		// Find the closing '---'
-		for (let i = 1; i < lines.length; i++) {
-			const line = lines[i];
-			if (line !== undefined && line.trim() === '---') {
-				frontmatterEndIndex = i;
-				break;
-			}
-		}
-	}
+	const { isIgnored } = getLineMetadata(lines);
 
 	for (let i = 0; i < lines.length - 1; i++) {
-		// Skip processing inside the YAML frontmatter block (start and end boundaries included)
-		if (inFrontmatter && i <= frontmatterEndIndex) {
+		if (isIgnored[i]) {
 			continue;
 		}
 
@@ -130,12 +138,9 @@ export function fixHorizontalRules(text: string, cursorLine?: number): { text: s
 			if (requiredNewlines > 0) {
 				for (let j = 0; j < requiredNewlines; j++) {
 					lines.splice(i + 1, 0, '');
+					isIgnored.splice(i + 1, 0, false); // Keep isIgnored array in sync with lines array
 					if (adjustedCursor !== undefined && i < adjustedCursor) {
 						adjustedCursor++;
-					}
-					// Adjust frontmatter index if we inserted a line before it
-					if (frontmatterEndIndex !== -1 && i < frontmatterEndIndex) {
-						frontmatterEndIndex++;
 					}
 				}
 				i += requiredNewlines;
@@ -189,47 +194,20 @@ export function findCutLine(text: string, cursorLine: number): number {
 
 export function processHideBlocks(text: string, cursorLine?: number): { text: string; cursorLine?: number } {
 	const lines = text.split('\n');
-	let inCodeBlock = false;
-	let inFrontmatter = false;
-	
-	if (lines.length > 0 && lines[0] !== undefined && lines[0].trim() === '---') {
-		inFrontmatter = true;
-	}
-
+	const { isIgnored } = getLineMetadata(lines);
 	const hideIndices: number[] = [];
 
 	for (let i = 0; i < lines.length; i++) {
-		const line = lines[i];
-		if (line === undefined) continue;
-		const trimmed = line.trim();
-
-		// Track YAML frontmatter
-		if (i > 0 && trimmed === '---') {
-			if (inFrontmatter) {
-				inFrontmatter = false;
-				continue;
-			}
-		}
-		if (inFrontmatter) {
+		if (isIgnored[i]) {
 			continue;
 		}
-
-		// Track code blocks
-		if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) {
-			inCodeBlock = !inCodeBlock;
-			continue;
-		}
-		if (inCodeBlock) {
-			continue;
-		}
-
-		if (trimmed === '//hide') {
+		if (lines[i]?.trim() === '//hide') {
 			hideIndices.push(i);
 		}
 	}
 
 	// Pair up indices. If there is an odd number, the last one is unclosed and ignored.
-	const isHidden = new Array(lines.length).fill(false);
+	const isHidden = new Array<boolean>(lines.length).fill(false);
 	const pairCount = Math.floor(hideIndices.length / 2);
 	for (let k = 0; k < pairCount; k++) {
 		const start = hideIndices[k * 2];
@@ -267,4 +245,26 @@ export function processHideBlocks(text: string, cursorLine?: number): { text: st
 		text: resultLines.join('\n'),
 		cursorLine: adjustedCursor
 	};
+}
+
+export function processBlankSpacers(text: string): string {
+	const lines = text.split('\n');
+	const { isIgnored } = getLineMetadata(lines);
+
+	const processedLines = lines.map((line, index) => {
+		if (isIgnored[index]) {
+			return line;
+		}
+
+		const trimmed = line.trim();
+		const match = trimmed.match(/^\/\/blank\[(\d+(?:\.\d+)?)\]$/);
+		if (match && match[1] !== undefined) {
+			const height = match[1];
+			return `<div class="pdf-blank-spacer" style="height: ${height}mm;"></div>`;
+		}
+
+		return line;
+	});
+
+	return processedLines.join('\n');
 }
