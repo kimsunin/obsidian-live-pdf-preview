@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-live-pdf-preview",
-	"version": "1.3.3",
+	"version": "1.3.4",
 	"description": "Real-time PDF preview and export plugin.",
 	"main": "main.js",
 	"type": "module",
