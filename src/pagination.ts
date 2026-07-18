@@ -89,6 +89,58 @@ export function measurePx(mm: number): number {
 	return height;
 }
 
+const heightCache = new WeakMap<HTMLElement, number>();
+const imageListenerSet = new WeakSet<HTMLImageElement>();
+
+/**
+ * Caches and retrieves the layout height of an element.
+ * Only caches elements belonging to the "upper" section.
+ * If there are unloaded images inside, it refrains from caching and attaches
+ * a single-fire listener to clear the cache on ancestors and notify the view.
+ */
+export function getElementHeight(el: HTMLElement): number {
+	const images = Array.from(el.querySelectorAll('img'));
+	let hasUnloadedImage = false;
+	for (let i = 0; i < images.length; i++) {
+		const img = images[i];
+		if (img && !img.complete) {
+			hasUnloadedImage = true;
+			break;
+		}
+	}
+
+	if (!hasUnloadedImage) {
+		const cached = heightCache.get(el);
+		if (cached !== undefined) {
+			return cached;
+		}
+	}
+
+	const height = el.offsetHeight;
+
+	if (!hasUnloadedImage && el.getAttribute('data-section') === 'upper') {
+		heightCache.set(el, height);
+	}
+
+	if (hasUnloadedImage) {
+		images.forEach(img => {
+			if (!img.complete && !imageListenerSet.has(img)) {
+				imageListenerSet.add(img);
+				img.addEventListener('load', () => {
+					let parent: HTMLElement | null = el;
+					while (parent) {
+						heightCache.delete(parent);
+						parent = parent.parentElement;
+					}
+					el.dispatchEvent(new CustomEvent('pdf-preview-image-loaded', { bubbles: true }));
+				}, { once: true });
+			}
+		});
+	}
+
+	return height;
+}
+
 /**
  * Creates a new page wrapper + page element in the preview container.
  */
@@ -156,7 +208,7 @@ export function splitElementAtOverflow(el: HTMLElement, maxContentBottom: number
 		if (pageEl) {
 			return getScaledBottom(el, pageEl);
 		}
-		return el.offsetTop + el.offsetHeight;
+		return el.offsetTop + getElementHeight(el);
 	};
 
 	const originalBottom = getBottom();
@@ -315,7 +367,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 		// If it is a multi-column row (pdf-row) — try to fit or split column elements
 		if (el.classList.contains('pdf-row')) {
 			currentPage.appendChild(el);
-			const rowBottom = el.offsetTop + el.offsetHeight;
+			const rowBottom = el.offsetTop + getElementHeight(el);
 			const rowStyle = window.getComputedStyle(el);
 			const rowMarginBottom = parseFloat(rowStyle.marginBottom) || 0;
 
@@ -502,7 +554,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 		// If it is a center alignment container (pdf-center-block) — try to fit or split its children
 		if (el.classList.contains('pdf-center-block')) {
 			currentPage.appendChild(el);
-			const centerBottom = el.offsetTop + el.offsetHeight;
+			const centerBottom = el.offsetTop + getElementHeight(el);
 			const centerStyle = window.getComputedStyle(el);
 			const centerMarginBottom = parseFloat(centerStyle.marginBottom) || 0;
 
@@ -655,7 +707,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 		// If it's a TABLE — try to fit or split row-by-row
 		if (el.tagName === 'TABLE') {
 			currentPage.appendChild(el);
-			const tableBottom = el.offsetTop + el.offsetHeight;
+			const tableBottom = el.offsetTop + getElementHeight(el);
 			const tableStyle = window.getComputedStyle(el);
 			const tableMarginBottom = parseFloat(tableStyle.marginBottom) || 0;
 
@@ -767,7 +819,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 		// If it's a list (UL or OL) — try to fit or split item-by-item
 		if (el.tagName === 'OL' || el.tagName === 'UL') {
 			currentPage.appendChild(el);
-			const listBottom = el.offsetTop + el.offsetHeight;
+			const listBottom = el.offsetTop + getElementHeight(el);
 			const listStyle = window.getComputedStyle(el);
 			const listMarginBottom = parseFloat(listStyle.marginBottom) || 0;
 
@@ -793,7 +845,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 			for (const li of listItems) {
 				currentListContainer.appendChild(li);
 
-				const relativeBottom = li.offsetTop + li.offsetHeight;
+				const relativeBottom = li.offsetTop + getElementHeight(li);
 				const liStyle = window.getComputedStyle(li);
 				const liMarginBottom = parseFloat(liStyle.marginBottom) || 0;
 				const totalBottom = relativeBottom + liMarginBottom;
@@ -839,7 +891,7 @@ export function applyVirtualPagination(config: PaginationConfig) {
 		// General element pagination
 		currentPage.appendChild(el);
 
-		const relativeBottom = el.offsetTop + el.offsetHeight;
+		const relativeBottom = el.offsetTop + getElementHeight(el);
 		const elStyle = window.getComputedStyle(el);
 		const elMarginBottom = parseFloat(elStyle.marginBottom) || 0;
 		const totalBottom = relativeBottom + elMarginBottom;

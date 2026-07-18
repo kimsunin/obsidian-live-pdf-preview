@@ -4,7 +4,7 @@ import { restoreFromPages, applyPageBreaks, applyVirtualPagination } from './pag
 import { ExportPdfModal, CustomCssModal, QuickStyleModal, exportToPdf } from './export';
 import type LivePdfPreviewPlugin from './main';
 import { FONT_FAMILY_MAP, PAGE_DIMENSIONS, VIEW_TYPE_PDF_PREVIEW } from './types';
-import { processMarkdownIndentation, fixColumnLines, fixHorizontalRules, findCutLine, processHideBlocks, processBlankSpacers } from './preprocessor';
+import { fixColumnLines, findCutLine, preprocessMarkdown } from './preprocessor';
 import { groupColumns, groupCenterBlocks } from './dom-utils';
 
 export class PdfPreviewView extends ItemView {
@@ -105,6 +105,10 @@ export class PdfPreviewView extends ItemView {
 		const container = this.contentEl;
 		container.empty();
 		container.id = 'pdf-preview-sandbox';
+
+		container.addEventListener('pdf-preview-image-loaded', () => {
+			this.debouncedRender();
+		});
 
 		// Create header (Obsidian native style)
 		const headerEl = container.createDiv({
@@ -442,21 +446,12 @@ export class PdfPreviewView extends ItemView {
 		let text = await this.app.vault.read(this.currentFile);
 		const sourcePath = this.currentFile.path;
 
-		// Preprocess hide blocks (remove paired //hide blocks)
-		text = processHideBlocks(text).text;
-
-		// Preprocess blank spacer blocks
-		text = processBlankSpacers(text);
-
-		// Preprocess horizontal rules to guarantee at least 2 trailing empty lines for rendering safety
-		text = fixHorizontalRules(text).text;
+		// Preprocess markdown (hide blocks, blank spacers, horizontal rules, indentation guides)
+		text = preprocessMarkdown(text).text;
 
 		if (this.showTitle) {
 			text = `# ${this.currentFile.basename}\n\n` + text;
 		}
-
-		// Apply custom indentation guide lines (Phase 8)
-		text = processMarkdownIndentation(text);
 
 		this.upperEl.empty();
 		this.lowerEl.empty();
@@ -509,26 +504,17 @@ export class PdfPreviewView extends ItemView {
 			const sourcePath = this.currentFile.path;
 			let cursorLine = editor.getCursor().line;
 
-			// Preprocess hide blocks (remove paired //hide blocks and adjust cursorLine)
-			const hideProcessed = processHideBlocks(text, cursorLine);
-			text = hideProcessed.text;
-			cursorLine = hideProcessed.cursorLine ?? cursorLine;
-
-			// Preprocess blank spacer blocks (1:1 line replacement, no cursorLine change)
-			text = processBlankSpacers(text);
-
-			// Preprocess horizontal rules to guarantee at least 2 trailing empty lines for rendering safety
-			const fixed = fixHorizontalRules(text, cursorLine);
-			text = fixed.text;
-			cursorLine = fixed.cursorLine || cursorLine;
+			// Preprocess markdown (hide blocks, blank spacers, horizontal rules, indentation guides)
+			const processed = preprocessMarkdown(text, cursorLine);
+			text = processed.text;
+			cursorLine = processed.cursorLine ?? cursorLine;
 
 			if (this.showTitle) {
 				text = `# ${this.currentFile.basename}\n\n` + text;
 				cursorLine = cursorLine + 2;
 			}
 
-			// Preprocess indentation on the entire text first to keep code block tracking accurate
-			const processedText = processMarkdownIndentation(text);
+			const processedText = text;
 
 			// Find safe block boundary above cursor
 			const cutLine = findCutLine(processedText, cursorLine);

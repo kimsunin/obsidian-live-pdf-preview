@@ -42,19 +42,102 @@ export function getLineMetadata(lines: string[]): { isIgnored: boolean[] } {
 	return { isIgnored };
 }
 
-export function processMarkdownIndentation(text: string): string {
+export function preprocessMarkdown(text: string, cursorLine?: number): { text: string; cursorLine?: number } {
 	const lines = text.split('\n');
 	const { isIgnored } = getLineMetadata(lines);
 
-	const processedLines = lines.map((line, index) => {
-		if (isIgnored[index]) {
-			return line;
+	// Step 1: Scan for all valid closed //hide blocks
+	const hideIndices: number[] = [];
+	for (let i = 0; i < lines.length; i++) {
+		if (isIgnored[i]) {
+			continue;
+		}
+		if (lines[i]?.trim() === '//hide') {
+			hideIndices.push(i);
+		}
+	}
+
+	const isHidden = new Array<boolean>(lines.length).fill(false);
+	const pairCount = Math.floor(hideIndices.length / 2);
+	for (let k = 0; k < pairCount; k++) {
+		const start = hideIndices[k * 2];
+		const end = hideIndices[k * 2 + 1];
+		if (start !== undefined && end !== undefined) {
+			for (let i = start; i <= end; i++) {
+				isHidden[i] = true;
+			}
+		}
+	}
+
+	const resultLines: string[] = [];
+	let adjustedCursor = cursorLine;
+
+	// Step 2: Main single-pass loop
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i];
+		if (line === undefined) continue;
+
+		// A. If hidden, skip and adjust cursor
+		if (isHidden[i]) {
+			if (cursorLine !== undefined) {
+				if (i < cursorLine) {
+					adjustedCursor = (adjustedCursor ?? 0) - 1;
+				} else if (i === cursorLine) {
+					adjustedCursor = resultLines.length;
+				}
+			}
+			continue;
 		}
 
-		if (line.trim() === '') {
-			return line;
+		// B. If inside code block or YAML frontmatter, keep as-is
+		if (isIgnored[i]) {
+			resultLines.push(line);
+			continue;
 		}
 
+		const trimmed = line.trim();
+
+		// C. Check //blank[높이]
+		const blankMatch = trimmed.match(/^\/\/blank\[(\d+(?:\.\d+)?)\]$/);
+		if (blankMatch && blankMatch[1] !== undefined) {
+			const height = blankMatch[1];
+			resultLines.push(`<div class="pdf-blank-spacer" style="height: ${height}mm;"></div>`);
+			continue;
+		}
+
+		// D. Check horizontal rules
+		if (i > 0 && /^(?:-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+			resultLines.push(line);
+
+			// Count following empty lines (skipping hidden ones)
+			let emptyLineCount = 0;
+			let nextIdx = i + 1;
+			while (nextIdx < lines.length) {
+				if (isHidden[nextIdx]) {
+					nextIdx++;
+					continue;
+				}
+				if (lines[nextIdx]?.trim() === '') {
+					emptyLineCount++;
+					nextIdx++;
+				} else {
+					break;
+				}
+			}
+
+			const requiredNewlines = 2 - emptyLineCount;
+			if (requiredNewlines > 0) {
+				for (let j = 0; j < requiredNewlines; j++) {
+					resultLines.push('');
+					if (adjustedCursor !== undefined && i < adjustedCursor) {
+						adjustedCursor++;
+					}
+				}
+			}
+			continue;
+		}
+
+		// E. Check custom indentation (indentation guides)
 		let indentLevel = 0;
 		let tempLine = line;
 		while (true) {
@@ -69,25 +152,33 @@ export function processMarkdownIndentation(text: string): string {
 			}
 		}
 
-		if (indentLevel === 0) {
-			return line;
+		if (indentLevel > 0 && tempLine.trim() !== '') {
+			const trimmedTemp = tempLine.trim();
+			const isList = /^(?:[-*+]|\d+\.)\s/.test(trimmedTemp);
+
+			if (!isList) {
+				let wrappedLine = tempLine;
+				for (let j = 0; j < indentLevel; j++) {
+					wrappedLine = `<div class="pdf-indent-container">${wrappedLine}</div>`;
+				}
+				resultLines.push(wrappedLine);
+				continue;
+			}
 		}
 
-		const trimmedTemp = tempLine.trim();
-		const isList = /^(?:[-*+]|\d+\.)\s/.test(trimmedTemp);
+		// Default case: push the line as is
+		resultLines.push(line);
+	}
 
-		if (isList) {
-			return line;
-		}
+	// Clamp cursorLine
+	if (adjustedCursor !== undefined) {
+		adjustedCursor = Math.max(0, Math.min(adjustedCursor, resultLines.length));
+	}
 
-		let wrappedLine = tempLine;
-		for (let i = 0; i < indentLevel; i++) {
-			wrappedLine = `<div class="pdf-indent-container">${wrappedLine}</div>`;
-		}
-		return wrappedLine;
-	});
-
-	return processedLines.join('\n');
+	return {
+		text: resultLines.join('\n'),
+		cursorLine: adjustedCursor
+	};
 }
 
 export function fixColumnLines(text: string): string {
@@ -108,46 +199,6 @@ export function fixColumnLines(text: string): string {
 		}
 	}
 	return lines.join('\n');
-}
-
-export function fixHorizontalRules(text: string, cursorLine?: number): { text: string; cursorLine?: number } {
-	const lines = text.split('\n');
-	let adjustedCursor = cursorLine;
-	const { isIgnored } = getLineMetadata(lines);
-
-	for (let i = 0; i < lines.length - 1; i++) {
-		if (isIgnored[i]) {
-			continue;
-		}
-
-		const line = lines[i];
-		if (line !== undefined && i > 0 && /^(?:-{3,}|\*{3,}|_{3,})$/.test(line.trim())) {
-			// Count how many empty lines follow the horizontal rule
-			let emptyLineCount = 0;
-			while (i + 1 + emptyLineCount < lines.length) {
-				const nextLine = lines[i + 1 + emptyLineCount];
-				if (nextLine !== undefined && nextLine.trim() === '') {
-					emptyLineCount++;
-				} else {
-					break;
-				}
-			}
-
-			// Ensure at least 2 empty lines follow horizontal rules to prevent rendering glitches.
-			const requiredNewlines = 2 - emptyLineCount;
-			if (requiredNewlines > 0) {
-				for (let j = 0; j < requiredNewlines; j++) {
-					lines.splice(i + 1, 0, '');
-					isIgnored.splice(i + 1, 0, false); // Keep isIgnored array in sync with lines array
-					if (adjustedCursor !== undefined && i < adjustedCursor) {
-						adjustedCursor++;
-					}
-				}
-				i += requiredNewlines;
-			}
-		}
-	}
-	return { text: lines.join('\n'), cursorLine: adjustedCursor };
 }
 
 export function isInsideBlock(lines: string[], targetLineIndex: number, marker: string): boolean {
@@ -190,81 +241,4 @@ export function findCutLine(text: string, cursorLine: number): number {
 		}
 	}
 	return 0;
-}
-
-export function processHideBlocks(text: string, cursorLine?: number): { text: string; cursorLine?: number } {
-	const lines = text.split('\n');
-	const { isIgnored } = getLineMetadata(lines);
-	const hideIndices: number[] = [];
-
-	for (let i = 0; i < lines.length; i++) {
-		if (isIgnored[i]) {
-			continue;
-		}
-		if (lines[i]?.trim() === '//hide') {
-			hideIndices.push(i);
-		}
-	}
-
-	// Pair up indices. If there is an odd number, the last one is unclosed and ignored.
-	const isHidden = new Array<boolean>(lines.length).fill(false);
-	const pairCount = Math.floor(hideIndices.length / 2);
-	for (let k = 0; k < pairCount; k++) {
-		const start = hideIndices[k * 2];
-		const end = hideIndices[k * 2 + 1];
-		if (start !== undefined && end !== undefined) {
-			for (let i = start; i <= end; i++) {
-				isHidden[i] = true;
-			}
-		}
-	}
-
-	const resultLines: string[] = [];
-	let adjustedCursor = cursorLine;
-
-	for (let i = 0; i < lines.length; i++) {
-		if (isHidden[i]) {
-			if (cursorLine !== undefined) {
-				if (i < cursorLine) {
-					adjustedCursor = (adjustedCursor ?? 0) - 1;
-				} else if (i === cursorLine) {
-					adjustedCursor = resultLines.length;
-				}
-			}
-			continue;
-		}
-		resultLines.push(lines[i] as string);
-	}
-
-	// Safety clamp to ensure adjustedCursor is in bounds of the new lines array
-	if (adjustedCursor !== undefined) {
-		adjustedCursor = Math.max(0, Math.min(adjustedCursor, resultLines.length));
-	}
-
-	return {
-		text: resultLines.join('\n'),
-		cursorLine: adjustedCursor
-	};
-}
-
-export function processBlankSpacers(text: string): string {
-	const lines = text.split('\n');
-	const { isIgnored } = getLineMetadata(lines);
-
-	const processedLines = lines.map((line, index) => {
-		if (isIgnored[index]) {
-			return line;
-		}
-
-		const trimmed = line.trim();
-		const match = trimmed.match(/^\/\/blank\[(\d+(?:\.\d+)?)\]$/);
-		if (match && match[1] !== undefined) {
-			const height = match[1];
-			return `<div class="pdf-blank-spacer" style="height: ${height}mm;"></div>`;
-		}
-
-		return line;
-	});
-
-	return processedLines.join('\n');
 }
